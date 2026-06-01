@@ -3,18 +3,25 @@
     "name": "CloudRealm",
     "type": "browser_game",
     "tagline": "AWS Fantasy RPG — learn cloud architecture through tabletop board placement",
-    "primary_file": "aws-rpg.html",
-    "supporting_files": ["README.md", "Notes/change_log.json", "Notes/implementation_notes.md"],
-    "tech_stack": ["HTML5", "CSS3", "vanilla_javascript", "google_fonts"],
-    "target_runtime": "browser_no_server_required"
+    "primary_file": "cloud-realm/src/components/GameBoard.jsx",
+    "legacy_file": "aws-rpg.html",
+    "supporting_files": ["README.md", "Notes/change_log.json", "Notes/implementation_notes.md", "Notes/implementation_techniques.md"],
+    "tech_stack_v1": ["HTML5", "CSS3", "vanilla_javascript", "google_fonts"],
+    "tech_stack_v2": ["React18", "Zustand", "Vite", "HTML5_Canvas_API", "requestAnimationFrame", "google_fonts"],
+    "target_runtime": "vite_dev_server_or_production_build"
   },
 
   "current_state": {
-    "version": "0.3.0",
-    "status": "playable_prototype",
+    "version": "0.4.0",
+    "status": "canvas_rewrite_complete",
     "last_updated": "2026-06-01",
+    "active_codebase": "cloud-realm/",
+    "legacy_codebase": "aws-rpg.html",
     "interaction_model": "click_select_then_click_place",
     "drag_and_drop": false,
+    "zoom_pan": true,
+    "programmatic_sprites": true,
+    "raf_game_loop": true,
     "known_bugs": [],
     "features_active": [
       "hex_grid_11x9",
@@ -34,7 +41,6 @@
       "zone_label_overlays"
     ],
     "features_pending": [
-      "drag_and_drop_secondary",
       "threat_mechanics",
       "combat_system",
       "tutorial_mode",
@@ -281,20 +287,89 @@
         { "type": "docs", "description": "Notes/implementation_notes.md — human engineer walkthrough with rationale" }
       ],
       "files_affected": ["Notes/change_log.json", "Notes/implementation_notes.md"]
+    },
+    {
+      "version": "0.3.2",
+      "date": "2026-06-01",
+      "session_phase": "documentation",
+      "title": "implementation_techniques.md — DOM vs Canvas analysis",
+      "summary": "Analysed two projects (CloudRealm v1 and Dungeon Architect) with different rendering architectures. Documented the DOM vs Canvas tradeoffs, the game loop, delta time, state management patterns, and a 3-phase migration plan.",
+      "changes": [
+        { "type": "docs", "description": "Notes/implementation_techniques.md — 2500-word technical comparison with decision matrix and migration roadmap" }
+      ],
+      "files_affected": ["Notes/implementation_techniques.md"]
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-06-01",
+      "session_phase": "canvas_rewrite",
+      "title": "Canvas rewrite — cloud-realm/ React + Zustand + RAF",
+      "summary": "Full rewrite to Canvas/React/Zustand architecture. Legacy aws-rpg.html preserved for historical reference. New project in cloud-realm/ folder with 11 source files across game/, store/, and components/ directories.",
+      "changes": [
+        { "type": "new_project", "description": "cloud-realm/ — npm project with React 18, Zustand 4.5, Vite 5" },
+        { "type": "feature", "description": "HTML5 Canvas rendering — hex grid drawn with ctx.beginPath/arc, no DOM nodes for tiles" },
+        { "type": "feature", "description": "requestAnimationFrame game loop running at 60fps with delta time support" },
+        { "type": "feature", "description": "Zoom: mouse wheel zooms toward cursor using pan = cursor - (cursor - pan) * newZoom/oldZoom" },
+        { "type": "feature", "description": "Pan: alt+drag pans the world-space camera" },
+        { "type": "feature", "description": "12 programmatic service sprites — all drawn with canvas shapes + Math.sin(t) idle animations" },
+        { "type": "feature", "description": "Zustand store — reactive state, zero prop-drilling, store reads via refs in RAF loop" },
+        { "type": "feature", "description": "Animated connection lines — flowing dash offset driven by t*0.04" },
+        { "type": "feature", "description": "Gate tile glow pulse, wall stripe pattern, valid/invalid tile selection overlays" },
+        { "type": "feature", "description": "In-canvas toast notifications (no DOM element, drawn in screen space outside camera transform)" },
+        { "type": "architecture", "description": "game/ folder is pure functions — no React, no DOM, fully testable in isolation" },
+        { "type": "architecture", "description": "Simulation/render separation: store handles logic, GameBoard.jsx handles rendering" },
+        { "type": "architecture", "description": "RAF reads state via refs (gridRef, placedRef, selectedRef) so loop never restarts on state changes" }
+      ],
+      "files_created": [
+        "cloud-realm/package.json",
+        "cloud-realm/vite.config.js",
+        "cloud-realm/index.html",
+        "cloud-realm/SETUP.md",
+        "cloud-realm/src/main.jsx",
+        "cloud-realm/src/App.jsx",
+        "cloud-realm/src/index.css",
+        "cloud-realm/src/game/constants.js",
+        "cloud-realm/src/game/hexGrid.js",
+        "cloud-realm/src/game/sprites.js",
+        "cloud-realm/src/store/gameStore.js",
+        "cloud-realm/src/components/GameScreen.jsx",
+        "cloud-realm/src/components/HUD.jsx",
+        "cloud-realm/src/components/ServicePalette.jsx",
+        "cloud-realm/src/components/MissionPanel.jsx",
+        "cloud-realm/src/components/GameBoard.jsx"
+      ],
+      "bugs_introduced": []
     }
   ],
 
   "architecture_snapshot": {
-    "file": "aws-rpg.html",
-    "size_approx_lines": 620,
-    "structure": {
-      "css_variables": ["--bg", "--bg2", "--bg3", "--border", "--border2", "--text", "--text2", "--text3", "--gold", "--gold2", "--green", "--green2", "--teal", "--teal2", "--purple", "--red", "--hex-size", "--hex-h", "--hex-gap"],
-      "layout": "three_column_grid: 224px | 1fr | 264px",
-      "panels": ["#palette (left)", "#board-area (center)", "#missions-panel (right)"],
-      "state_object_keys": ["grid", "placed", "selectedServiceId", "gold", "completedMissions", "activeMission"],
-      "render_functions": ["renderGrid", "renderPalette", "renderMissions", "renderConnections", "renderZoneLabels"],
-      "interaction_functions": ["selectService", "clearSelection", "canPlace", "placeService", "removeService", "onInspect"],
-      "utility_functions": ["buildGrid", "hexId", "getPlacedCount", "getNeighbors", "checkAdjacent", "getHexCenter", "updateCounters", "showToast", "checkMissions"]
+    "v1_legacy": {
+      "file": "aws-rpg.html",
+      "size_approx_lines": 620,
+      "rendering": "DOM_elements_with_clip_path",
+      "state": "plain_js_object",
+      "animation": "css_keyframes"
+    },
+    "v2_active": {
+      "entry": "cloud-realm/src/main.jsx",
+      "rendering": "html5_canvas_api",
+      "state": "zustand_global_store",
+      "animation": "math_sin_in_raf_loop",
+      "game_loop": "requestAnimationFrame_60fps",
+      "camera": "ctx_translate_scale_pan_zoom",
+      "file_structure": {
+        "game/constants.js":  "all data — services, missions, grid geometry, terrain colours",
+        "game/hexGrid.js":    "hexCenter, pixelToHex, getNeighbors, buildGrid, drawHexPath, canPlaceHere",
+        "game/sprites.js":    "drawSprite dispatcher + 12 service draw functions",
+        "store/gameStore.js": "zustand store — grid, placed, selectedServiceId, gold, camera, all actions",
+        "components/GameBoard.jsx": "canvas element + RAF loop + zoom/pan + click handling",
+        "components/ServicePalette.jsx": "HTML left panel — click to select service",
+        "components/MissionPanel.jsx": "HTML right panel — mission requirements, claim button",
+        "components/HUD.jsx": "HTML top bar — gold, deployed count, mission name"
+      },
+      "store_keys": ["grid", "placed", "selectedServiceId", "gold", "completedMissions", "activeMission", "panX", "panY", "zoom", "getNeighbors"],
+      "store_actions": ["selectService", "clearSelection", "placeService", "removeService", "completeMission", "setCamera"],
+      "raf_ref_pattern": "gridRef/placedRef/selectedRef/cameraRef updated each render, read inside draw()"
     }
   },
 
@@ -308,19 +383,23 @@
   ],
 
   "context_for_ai": {
-    "how_to_read_this_file": "Use changelog array for sequential history. Use current_state.features_active to know what exists. Use current_state.features_pending for roadmap. Use architecture_snapshot for code navigation. Use services and missions arrays as ground truth for game data.",
+    "how_to_read_this_file": "Use changelog array for sequential history. current_state reflects v2 (cloud-realm/). architecture_snapshot.v2_active is the live codebase. v1 (aws-rpg.html) is legacy/read-only.",
+    "active_codebase": "cloud-realm/",
     "next_likely_tasks": [
-      "Add more missions (Route53, Auto Scaling, VPC Peering)",
-      "Add threat/attack mechanics for incorrect architectures",
-      "Add animated service tiles (Lambda flashes on invoke, EC2 pulses steadily)",
+      "Add more missions (Route53, Auto Scaling, VPC Peering, ElastiCache)",
+      "Add wave/threat mechanics — enemies attack the kingdom, services must be correctly wired to survive",
+      "Add walking characters — Lambda ninja moves between tiles on invocation, EC2 knight patrols",
+      "Add a title/menu screen and game phase state machine (menu → build → wave → debrief)",
       "Add tutorial overlay for first-time players",
-      "Improve visual quality of hex tiles with illustrated backgrounds"
+      "Add simulation.js — pure tick function that advances threats, triggers events, checks architecture validity"
     ],
     "critical_constraints": [
-      "Must remain a single HTML file",
       "All game mechanics must accurately reflect real AWS behaviour",
       "Interaction model is click-select-then-click-place (not drag-and-drop)",
-      "Hex pointer events rely on .hex-bg having clip-path and .hex > * having pointer-events:none — do not remove these"
+      "RAF loop reads state ONLY via refs (gridRef, placedRef, cameraRef) — never via closed-over state",
+      "game/ folder must remain free of React and DOM — pure functions only",
+      "Do NOT modify aws-rpg.html — it is a historical artifact",
+      "All new features go in cloud-realm/src/"
     ]
   }
 }
