@@ -6,17 +6,32 @@ CloudRealm is a browser-based, hex-tile strategy game that teaches AWS cloud arc
 
 ---
 
+## Quick Start
+
+**Requirements:** Node.js 18+
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+---
+
 ## Table of Contents
 
 1. [The Concept](#the-concept)
 2. [How to Play](#how-to-play)
-3. [The Game Board](#the-game-board)
-4. [The Service Roster](#the-service-roster)
-5. [Missions](#missions)
-6. [Game Mechanics](#game-mechanics)
-7. [Technical Architecture](#technical-architecture)
-8. [What Players Actually Learn](#what-players-actually-learn)
-9. [Roadmap](#roadmap)
+3. [Controls](#controls)
+4. [The Game Board](#the-game-board)
+5. [The Service Roster](#the-service-roster)
+6. [Missions](#missions)
+7. [Game Mechanics](#game-mechanics)
+8. [Technical Architecture](#technical-architecture)
+9. [Project Structure](#project-structure)
+10. [What Players Actually Learn](#what-players-actually-learn)
+11. [Roadmap](#roadmap)
 
 ---
 
@@ -28,79 +43,87 @@ Every AWS service maps to a fantasy character or structure with a personality th
 
 - **Lambda** is a ninja — it appears only when summoned, completes exactly one task, and vanishes. No idle cost. No permanent station.
 - **EC2** is a knight — always on duty, always costing gold (compute hours), upgradeable, and replaceable.
-- **RDS** is a Great Library — structured, organised, with a Primary Scribe (write replica) and a Replica Scribe (read replica). It goes offline for maintenance.
+- **RDS** is a Great Library — structured, organised, relational. Has a Primary Scribe (write node) and a Replica Scribe (read replica). Goes offline for maintenance.
 - **VPC** is the kingdom wall itself — nothing enters or leaves without the Iron Gate (Internet Gateway) being open.
+- **SQS** is the Raven Queue — messages queue up and fly reliably between services. The Ravens don't drop messages.
+- **NAT Gateway** is the Secret Tunnel — private forces can venture outward anonymously, but nothing from outside can find its way in.
 
-The game is not a metaphor layered on top of real content. The mechanics *are* the content. When a player places Lambda and SQS adjacent to each other and the gold dashed connection line appears, they have just understood event-driven architecture.
+The game is not a metaphor layered on top of real content. The mechanics *are* the content. When a player places Lambda and SQS adjacent to each other and the animated gold connection line appears, they have just understood event-driven architecture.
 
 ---
 
 ## How to Play
 
-CloudRealm runs entirely in the browser. Open `aws-rpg.html` — no installation, no server, no build step.
-
 ### Interface Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  ☽ CloudRealm      Mission I — The First Bastion    ⚔️ 0  ✅ 0/3  🪙 100  │
-├──────────────┬──────────────────────────────┬───────────────────┤
-│              │                              │                   │
-│   SERVICE    │        HEX GRID BOARD        │    MISSIONS       │
-│   ROSTER     │                              │    PANEL          │
-│              │   (drag services here)       │                   │
-│  ⚔ Iron      │                              │  📜 Requirements  │
-│  Knight      │                              │                   │
-│  🥷 Shadow   │                              │  🔍 Tile Info     │
-│  Ninja       │                              │                   │
-│  ...         │                              │  🗺 Legend        │
-│              │                              │                   │
-└──────────────┴──────────────────────────────┴───────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  ☽ CloudRealm        Mission I — The First Bastion    ⚔️ 0  ✅ 0/3  🪙 100  │
+├──────────────┬──────────────────────────────────┬───────────────────┤
+│              │                                  │                   │
+│   SERVICE    │        HEX GRID BOARD            │    MISSIONS       │
+│   ROSTER     │        (HTML5 Canvas)            │    PANEL          │
+│              │                                  │                   │
+│  Click a     │   scroll to zoom                 │  📜 Requirements  │
+│  service     │   alt+drag to pan                │                   │
+│  card to     │   click tile to place            │  ✓ checked live   │
+│  select it   │   right-click to remove          │                   │
+│              │                                  │  🗺 Legend        │
+└──────────────┴──────────────────────────────────┴───────────────────┘
 ```
 
-**Step 1 — Read the mission.** Each mission in the right panel describes a challenge in lore language and lists specific requirements. Requirements check off in real time as you build.
+**Step 1 — Read the mission.** The right panel shows the active mission with its requirements. Requirements check off in real time as you build.
 
-**Step 2 — Drag a service.** Click and drag any service card from the left panel onto a hex tile on the board. The board enforces zone rules — public services can only go in the green (public subnet) zone, private services only in the teal (private subnet) zone.
+**Step 2 — Select a service.** Click any service card in the left panel. It highlights gold and a hint banner appears. Valid tiles on the board immediately pulse green; invalid tiles dim.
 
-**Step 3 — Watch connections form.** When two adjacent services can communicate with each other, a gold dashed line automatically appears between them. This represents a valid AWS service connection (e.g. EC2 → RDS, Lambda → SQS).
+**Step 3 — Place it.** Click any glowing tile on the board to place the service. If the placement fails, a brief toast explains why (wrong zone, not enough gold, etc.).
 
-**Step 4 — Complete the mission.** Once all requirements are satisfied, the "Claim Victory" button appears. Click it to collect your gold reward and unlock the next mission.
+**Step 4 — Watch connections form.** When two adjacent services can communicate, an animated gold dashed line flows between them. This represents a valid AWS integration (e.g. EC2 → RDS, Lambda → SQS).
 
-**Removing a service** — click any occupied tile to inspect it, then click "Remove" for a 50% gold refund.
+**Step 5 — Complete the mission.** Once all requirements are satisfied, a "Claim Victory" button appears. Click it to collect your gold reward and unlock the next mission.
+
+**Removing a service** — right-click any occupied tile for a 50% gold refund.
+
+---
+
+## Controls
+
+| Input | Action |
+|---|---|
+| Click a service card | Select it for placement |
+| Click a glowing tile | Place the selected service |
+| Right-click an occupied tile | Remove service (50% gold refund) |
+| Scroll wheel | Zoom in / out toward cursor |
+| Alt + drag | Pan the map |
+| Escape | Cancel current selection |
 
 ---
 
 ## The Game Board
 
-The board is an **11 × 9 hex grid** using offset rows (odd-r flat-top orientation). Every tile has a terrain type that determines what can be placed on it.
+The board is an **11 × 9 hex grid** using pointy-top orientation with odd-r offset rows. Every tile has a terrain type that determines what can be placed on it. The board is rendered on an HTML5 Canvas element and supports smooth zoom and pan.
 
 ### Terrain Types
 
 | Terrain | Colour | Description | AWS Equivalent |
 |---|---|---|---|
-| **VPC Wall** | Dark green, hatched | The kingdom's fortified perimeter. Structural only — most services cannot be placed here. | VPC boundary / Security Group perimeter |
-| **VPC Gate** | Dark green, door icon | Special wall tiles where the Internet Gateway can be installed. | VPC Internet Gateway attachment point |
-| **Public Subnet** | Green (`#1c2e18`) | Visible to the Outer Realm. Public-facing services live here. | AWS Public Subnet |
-| **Private Subnet** | Teal (`#142820`) | The Inner Sanctum. No outsider can reach here directly. | AWS Private Subnet |
-| **Outer Realm** | Near-black (`#1a1c22`) | The internet. Nothing can be deployed here. | The public internet |
-
-### Grid Coordinates
-
-Rows and columns use zero-based indexing. Odd rows are offset by half a hex width. The private subnet occupies approximately rows 3–5, columns 3–7. The public subnet wraps around it in rows 2–6. The VPC Wall forms the border at rows 1–7, cols 1–9.
+| **VPC Wall** | Dark green, hatched | The kingdom's fortified perimeter. Structural only — most services cannot be placed here. | VPC boundary |
+| **VPC Gate** | Dark green, glowing ring | Special wall tiles where the Internet Gateway can be installed. Pulses gold. | IGW attachment point |
+| **Public Subnet** | Green (`#1a2d18`) | Visible to the Outer Realm. Public-facing services live here. | AWS Public Subnet |
+| **Private Subnet** | Teal (`#112418`) | The Inner Sanctum. No outsider can reach here directly. | AWS Private Subnet |
+| **Outer Realm** | Near-black (`#0e1018`) | The internet. Nothing can be deployed here. | The public internet |
 
 ### Connection Lines
 
-A gold dashed line with a midpoint dot appears between two adjacent placed services when a valid connection exists in either service's `connections` array. A faint grey dashed line appears for adjacency without a valid connection — indicating the services are neighbours but don't communicate (useful for spatial planning).
+Animated gold dashed lines flow between adjacent placed services that have valid AWS integration relationships. The flow direction is animated via a moving dash offset. A faint static line appears for services that are adjacent but not architecturally linked — proximity is not connectivity.
 
 ---
 
 ## The Service Roster
 
-Twelve services are available in this build. Each card shows the service's fantasy name, its AWS identity, a description, its zone restriction, how many are deployed vs. available, and its hourly gold cost.
+Twelve services are available. Each card shows the service's fantasy name, AWS identity, zone restriction, deploy count, and hourly gold cost.
 
 ### Public Subnet Services
-
-These services face the Outer Realm and must live in the green zone.
 
 | Icon | Fantasy Name | AWS Service | Cost/hr | Max | Connects To |
 |---|---|---|---|---|---|
@@ -113,8 +136,6 @@ These services face the Outer Realm and must live in the green zone.
 
 ### Private Subnet Services
 
-These services live in the Inner Sanctum — the teal zone. They cannot be accessed directly from the Outer Realm; they only receive traffic from public-facing services or through the NAT Gateway.
-
 | Icon | Fantasy Name | AWS Service | Cost/hr | Max | Connects To |
 |---|---|---|---|---|---|
 | 🥷 | **Shadow Ninja** | Lambda Function | 0🪙 | 6 | SQS, RDS, S3, DynamoDB |
@@ -123,73 +144,57 @@ These services live in the Inner Sanctum — the teal zone. They cannot be acces
 | 🏛 | **Endless Vault** | S3 Bucket | 2🪙 | 4 | CloudFront, EC2, Lambda, ECS |
 | 🐦 | **Raven Queue** | SQS Queue | 1🪙 | 4 | Lambda, EC2, ECS |
 
-### Anywhere Services
-
-These can be placed in either the public or private subnet.
+### Any Zone
 
 | Icon | Fantasy Name | AWS Service | Cost/hr | Max | Notes |
 |---|---|---|---|---|---|
-| 📜 | **Royal Decree** | IAM Role | 0🪙 | 8 | No connections. Grants permission. Future mechanic: services without a Royal Decree cannot operate. |
+| 📜 | **Royal Decree** | IAM Role | 0🪙 | 8 | Can be placed in public or private subnet. Future mechanic: services without a Decree cannot operate. |
 
-### Why Iron Gate is Free (and Important)
+### Why Lambda costs nothing (and why that matters)
 
-The Internet Gateway has no cost — just like AWS. But it's a prerequisite for any inbound internet traffic to reach your public subnet. In the game, the board is completely sealed until you place the Iron Gate on a VPC Gate tile. This is the first thing players learn: before anything works, the gateway must be open.
-
-### Why Lambda Costs Nothing (and Everything)
-
-Lambda's gold cost is 0 — because Lambda charges per invocation, not per hour. You only pay when it's called. This is the core principle of serverless: no idle tax. The Iron Knight (EC2) costs 20🪙/hr whether it's processing a request or not. Players who spam EC2 instances burn their gold fast; players who understand when to use Lambda vs. EC2 preserve resources for the harder missions.
+Lambda's gold cost is 0 because Lambda charges per invocation, not per hour. No idle tax. The Iron Knight (EC2) costs 20🪙/hr whether it's handling a request or not. Players who spam EC2 burn gold fast; players who understand when to use Lambda vs EC2 preserve resources for harder missions. This cost asymmetry is the lesson.
 
 ---
 
 ## Missions
 
-Missions are presented in the right panel. Only one mission is active at a time; completing it unlocks the next. Requirements check in real time — each line turns green with a checkmark as soon as the condition is satisfied.
+Missions are presented in the right panel. Only one is active at a time; completing it unlocks the next. Requirements check in real time.
 
 ### Mission I — The First Bastion
 
-*"A lone knight must guard the realm's gate. The kingdom has no defenses — place an Iron Knight in the Outer City and open the Iron Gate so travelers may enter."*
+*"A lone knight must guard the realm's gate. Open the Iron Gate, deploy a Knight, and station a Siege Shield."*
 
-**Reward:** 30🪙
+**Reward:** 30🪙 · **AWS concept:** IGW → ALB → EC2 (three-tier web architecture entry point)
 
-| Requirement | Service | Zone | Notes |
-|---|---|---|---|
-| Place the Iron Gate | Internet Gateway | VPC Wall / Gate tile | Without this, no traffic enters the kingdom |
-| Deploy an Iron Knight | EC2 Instance | Public Subnet | The basic compute unit, always on guard |
-| Station a Siege Shield | Load Balancer | Public Subnet | Distributes incoming requests across knights |
-
-**AWS concept taught:** The basic three-tier web architecture entry point — IGW → ALB → EC2. This is the first thing you set up when hosting a web app on AWS.
-
----
+| Requirement | Service | Zone |
+|---|---|---|
+| Place the Iron Gate | Internet Gateway | VPC Wall / Gate tile |
+| Deploy an Iron Knight | EC2 Instance | Public Subnet |
+| Station a Siege Shield | Load Balancer | Public Subnet |
 
 ### Mission II — The Serverless Scout
 
-*"The Shadow Ninjas work best through the Raven Queue — they are summoned by messages, strike, and vanish. Build a serverless pipeline in the Inner Sanctum."*
+*"The Shadow Ninjas work best through the Raven Queue — summoned by messages, they strike and vanish."*
 
-**Reward:** 40🪙
+**Reward:** 40🪙 · **AWS concept:** SQS event source mapping → Lambda
 
-| Requirement | Service | Zone | Notes |
-|---|---|---|---|
-| Place a Shadow Ninja | Lambda Function | Private Subnet | Must be inside the Inner Sanctum |
-| Deploy a Raven Queue | SQS Queue | Private Subnet | The message queue that triggers the Ninja |
-| Lambda and SQS must be adjacent | — | — | Adjacency = direct event-source mapping |
-
-**AWS concept taught:** SQS-triggered Lambda is one of the most common serverless patterns. The adjacency requirement reinforces the concept of event source mapping — Lambda subscribes directly to the SQS queue. Players who try to place them on opposite sides of the board quickly discover the adjacency rule and understand why co-location of event producers and consumers matters.
-
----
+| Requirement | Service | Zone |
+|---|---|---|
+| Place a Shadow Ninja | Lambda Function | Private Subnet |
+| Deploy a Raven Queue | SQS Queue | Private Subnet |
+| Lambda and SQS must be adjacent | — | — |
 
 ### Mission III — The Eternal Archive
 
-*"The scholars demand their scrolls be accessible to all corners of the realm — swiftly. Link the Endless Vault to the Far Watcher so artifacts are cached at the kingdom's edge."*
+*"Link the Endless Vault to the Far Watcher so artifacts are cached at the kingdom's edge."*
 
-**Reward:** 50🪙
+**Reward:** 50🪙 · **AWS concept:** Private S3 origin → CloudFront CDN + RDS metadata store
 
-| Requirement | Service | Zone | Notes |
-|---|---|---|---|
-| Place the Endless Vault | S3 Bucket | Private Subnet | Origin storage in the Inner Sanctum |
-| Station a Far Watcher | CloudFront | Public Subnet | CDN edge cache at the realm's border |
-| Protect with the Great Library | RDS | Private Subnet | Metadata / structured data alongside artifacts |
-
-**AWS concept taught:** The S3 + CloudFront static asset delivery pattern is ubiquitous in production AWS. Keeping S3 in the private subnet (not publicly accessible) and routing all reads through CloudFront is a security and performance best practice. The addition of RDS teaches players that object storage (S3) and relational storage (RDS) serve different purposes and often coexist.
+| Requirement | Service | Zone |
+|---|---|---|
+| Place the Endless Vault | S3 Bucket | Private Subnet |
+| Station a Far Watcher | CloudFront | Public Subnet |
+| Protect with the Great Library | RDS | Private Subnet |
 
 ---
 
@@ -197,155 +202,164 @@ Missions are presented in the right panel. Only one mission is active at a time;
 
 ### Gold Economy
 
-Players start with **100🪙**. Every service costs gold to deploy (reflecting AWS hourly compute costs). Missions reward gold on completion — creating a progression loop where smart architecture earns you the resources to attempt harder missions.
+Players start with **100🪙**. Services cost gold to deploy; missions reward gold on completion.
 
 | Action | Gold Change |
 |---|---|
 | Deploy a service | `-cost` |
-| Remove a service | `+50% of cost (refund)` |
+| Remove a service | `+50% of original cost` |
 | Complete Mission I | `+30` |
 | Complete Mission II | `+40` |
 | Complete Mission III | `+50` |
 
-The asymmetric refund (50%) teaches a real AWS lesson: over-provisioning is costly. You can't simply spin up every service and remove what you don't need without penalty. Plan before you place.
+The asymmetric refund (50%) teaches a real AWS lesson: over-provisioning costs real money and you can't freely undo it without penalty. Plan before you place.
 
 ### Zone Enforcement
 
-Zone rules are enforced strictly at the drop target level. Attempting to drop a private service onto a public tile — or vice versa — results in no placement (the drop is silently rejected). This mirrors real AWS subnet design: you cannot accidentally place an RDS instance in a public subnet in this game, just as a thoughtful architect would configure their security groups to prevent it in production.
+`canPlaceHere(terrain, serviceDef)` in `hexGrid.js` enforces placement rules strictly:
 
-| Service Zone | Valid Tiles |
+| Service Zone | Valid Terrain |
 |---|---|
 | `public` | Public Subnet only |
 | `private` | Private Subnet only |
 | `wall` | VPC Wall or VPC Gate tiles |
 | `any` | Public or Private Subnet |
 
+When a service is selected, the board immediately shows which tiles are valid (pulsing green overlay) and which are invalid (dimmed). A toast explains rejections: wrong zone, tile occupied, max count reached, or insufficient gold.
+
 ### Adjacency and Connections
 
-Connections between services are drawn when two placed services occupy neighbouring hex tiles **and** a valid connection exists in either service's connection list. Connection validity reflects real AWS integration patterns:
-
-- EC2 → RDS: a knight reads from the library
-- Lambda → SQS: a ninja is triggered by a raven message
-- CloudFront → S3: the far watcher caches the vault's contents
-- Load Balancer → EC2/ECS/Lambda: the shield routes to any fighter
-
-Services that are adjacent but have no valid connection still appear (faint grey line) — they're physically close but not architecturally linked. This is intentional: physical proximity on the board should never be confused with actual connectivity.
-
-### Service Limits
-
-Each service has a `maxCount` that reflects real-world constraints or best practices:
-
-- Internet Gateway: **1 per VPC** (AWS hard limit)
-- NAT Gateway: **1** (typically one per AZ; single-AZ in this build)
-- Load Balancer: **2** (enough for redundancy)
-- EC2: **4** (encourages scaling via ECS/Lambda rather than raw instances)
-- Lambda: **6** (reflects serverless-first architecture philosophy)
-
-When a service hits its limit, its palette card is greyed out and marked "All deployed."
+The `getNeighbors(row, col)` function in `hexGrid.js` returns the six neighbours for a given hex using odd-r offset direction vectors (which differ for even and odd rows). A connection line is drawn between two adjacent placed services when a valid link exists in either service's `conns` array in `constants.js`. This adjacency mechanic teaches topology: Mission II's requirement that Lambda and SQS be on neighbouring tiles mirrors the real AWS concept of event source mapping co-location.
 
 ---
 
 ## Technical Architecture
 
-CloudRealm is a **single HTML file** — no build tools, no dependencies, no server required. Open it in any modern browser.
-
 ### Stack
 
-- **HTML5** — semantic structure
-- **CSS3** — `clip-path` for hexagons, CSS variables for the design system, `grid` for layout
-- **Vanilla JavaScript** — no frameworks; all state in a plain JS object
-- **Google Fonts** — Cinzel (fantasy headings), Crimson Text (body), loaded from CDN
+| Concern | Technology |
+|---|---|
+| UI framework | React 18 |
+| State management | Zustand 4.5 |
+| Build tool | Vite 5 |
+| Rendering | HTML5 Canvas API |
+| Game loop | `requestAnimationFrame` at 60fps |
+| Sprites | Programmatic — drawn in code, no image files |
+| Fonts | Google Fonts (Cinzel, Crimson Text) |
 
-### Hex Grid
+### Key architectural decisions
 
-Hexagons are rendered using CSS `clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)` on standard `<div>` elements. The grid uses odd-r offset coordinates: odd-numbered rows are shifted right by half a hex width using a `.offset` class.
+**Canvas over DOM for the game board.** The hex grid, service sprites, connection lines, zone highlights, and zoom/pan are all rendered to a single `<canvas>` element. This avoids the layout, style recalculation, and clip-path pointer-event problems of the DOM approach. The HTML panels (palette, missions, HUD) remain as React components — canvas is for the game world, DOM is for the UI chrome.
 
-Grid dimensions are controlled via CSS variables:
-```css
---hex-size: 52px;
---hex-gap: 3px;
-```
+**requestAnimationFrame game loop.** `GameBoard.jsx` runs a RAF loop at ~60fps. Every frame: clear, apply camera transform, draw terrain, draw connections, draw sprites, draw hover rings, draw toasts. This is the standard clear-and-redraw pattern of all 2D games. No frame requires knowledge of the previous one.
 
-### Drag and Drop
+**Zustand for global state.** All game state lives in a single Zustand store (`gameStore.js`). React components subscribe to exactly the slices they need — `HUD` subscribes to `gold`, `placed.length`, and `completedMissions`. The store holds the camera too (`panX`, `panY`, `zoom`).
 
-Uses the native HTML5 Drag and Drop API (`draggable`, `dragstart`, `dragover`, `drop`). Service cards are the drag sources; hex tiles are the drop targets. Zone validation runs inside the `dragover` handler — if the drop would be invalid, `dropEffect` is set to `'none'` and no highlight is shown.
+**Refs in the RAF loop (not subscriptions).** The canvas draw function is created once with `useCallback([], [])`. It reads `grid`, `placed`, `selectedServiceId`, and camera state via refs (`gridRef.current`, etc.) that are updated on every React render. This prevents the RAF loop from restarting when state changes — which would cause flickering. This is the solution to the stale closure problem.
 
-### Connection Rendering
+**Pure `game/` engine.** `constants.js`, `hexGrid.js`, and `sprites.js` contain no React, no DOM, no Zustand. They are pure functions: data in, data out (or draw commands to a `ctx` you pass in). This makes them independently testable and decoupled from any framework changes.
 
-After every placement, `renderConnections()` queries the DOM for each placed service's hex element using `getBoundingClientRect()`, converts to coordinates relative to the board wrapper, then draws SVG `<line>` elements between connected neighbours. This approach is layout-agnostic — it works regardless of screen size or zoom level.
+**Zoom toward cursor.** Zoom is implemented by adjusting `panX`/`panY` to keep the world point under the cursor stationary: `newPan = cursor - (cursor - pan) * (newZoom / oldZoom)`. The canvas camera applies `ctx.translate(panX, panY)` then `ctx.scale(zoom, zoom)` before drawing, and all click coordinates are inverse-transformed back to world space before hex lookup.
 
-### State Model
+**Programmatic sprites.** Every service character is drawn using canvas primitives (`fillRect`, `arc`, `beginPath`, `lineTo`) in `sprites.js`. No image files. Idle animations are driven entirely by `Math.sin(t * speed)` where `t` is `performance.now()` — a smooth oscillating value that makes sprites breathe, bob, flicker, and rotate without any external animation state.
 
-All game state lives in a single object:
+---
 
-```js
-const state = {
-  grid: [],          // 2D array of {terrain, service} cells
-  placed: [],        // [{hexId, serviceId, zone, row, col}]
-  dragging: null,    // serviceId currently being dragged
-  gold: 100,
-  completedMissions: Set,
-  activeMission: 0,
-};
-```
-
-There is no framework, no reactivity system, and no virtual DOM. Each interaction calls the relevant `render*()` functions directly. This keeps the codebase readable and easy to extend.
-
-### File Structure
+## Project Structure
 
 ```
 aws_roleplay/
-├── aws-rpg.html      ← The entire game (single file)
-└── README.md         ← This document
+│
+├── index.html              Browser entry point
+├── package.json            Dependencies and npm scripts
+├── vite.config.js          Vite + React plugin config
+│
+├── src/
+│   ├── main.jsx            Mounts React into <div id="root">
+│   ├── App.jsx             Root component (phase router for future screens)
+│   ├── index.css           CSS custom properties and global resets
+│   │
+│   ├── game/               Pure game logic — no React, no DOM
+│   │   ├── constants.js    All data: services, missions, grid geometry, terrain colours
+│   │   ├── hexGrid.js      Hex math: hexCenter, pixelToHex, getNeighbors, drawHexPath
+│   │   └── sprites.js      Canvas draw functions for all 12 services
+│   │
+│   ├── store/
+│   │   └── gameStore.js    Zustand store: all state + all actions
+│   │
+│   └── components/
+│       ├── GameScreen.jsx  Root layout: HUD + three-column grid
+│       ├── HUD.jsx         Top bar: gold, mission name, counters
+│       ├── ServicePalette.jsx  Left panel: service cards, selection state
+│       ├── MissionPanel.jsx    Right panel: mission requirements, legend
+│       └── GameBoard.jsx   Canvas element + RAF loop + zoom/pan + input
+│
+├── CONCEPTS.md             Deep technical teaching guide (start here to learn the codebase)
+├── SETUP.md                Quick-start and controls reference
+│
+├── Notes/
+│   ├── change_log.json         Structured project history for AI context
+│   ├── implementation_notes.md Engineering walkthrough of all decisions
+│   └── implementation_techniques.md  DOM vs Canvas analysis and migration rationale
+│
+└── historical/
+    └── aws-rpg.html        v1 — single HTML file, DOM/CSS, vanilla JS (preserved)
 ```
 
 ---
 
 ## What Players Actually Learn
 
-Every mechanic in CloudRealm maps to a real AWS concept. This table connects the game to the certification material:
+Every mechanic maps to a real AWS concept:
 
-| Game Mechanic | AWS Concept | Real-World Relevance |
+| Game Mechanic | AWS Concept | Why It Matters |
 |---|---|---|
 | VPC wall with gate tiles | VPC + Internet Gateway | No traffic enters a VPC without an IGW attached |
-| Public vs. private subnet zones | Public/Private Subnet routing | Internet-facing services in public; databases in private |
-| Iron Gate placement prerequisite | IGW attachment | Without attaching an IGW, your EC2 has no route to the internet |
+| Public vs. private subnet zones | Subnet routing | Internet-facing services in public; databases in private |
 | Lambda costs 0🪙 idle | Lambda per-invocation pricing | Serverless eliminates idle compute cost |
-| EC2 always costs gold | EC2 on-demand billing | Running EC2 instances accrue charges regardless of load |
-| NAT Gateway in public subnet | NAT Gateway placement rule | NAT GW must be in a public subnet to route private traffic outbound |
-| Lambda + SQS adjacency requirement | SQS event source mapping | Lambda subscribes to SQS; they must be in the same account/region |
-| S3 in private subnet + CloudFront in public | S3 origin with CloudFront CDN | Block direct S3 access; serve all content via CloudFront |
-| RDS in private subnet only | Database isolation | Production RDS instances should never be publicly accessible |
-| 50% removal refund | AWS over-provisioning cost | Unused resources cost real money; plan your architecture first |
-| Service connection rules | IAM policies + VPC routing tables | Services can only communicate if policies and routes permit it |
-| IAM Royal Decree (future mechanic) | IAM roles and policies | Every AWS service needs explicit permissions to interact with others |
-
-By the end of the three starter missions, a player has — without reading a single whitepaper — understood the fundamental AWS three-tier web architecture, serverless event-driven architecture, and a CDN-backed static asset delivery pattern.
+| EC2 always costs gold | EC2 on-demand billing | Running instances accrue charges regardless of load |
+| NAT Gateway must go in public subnet | NAT GW placement rule | NAT GW routes private traffic outbound via the public subnet |
+| Lambda + SQS adjacency requirement | SQS event source mapping | Lambda subscribes to SQS; they must be co-located architecturally |
+| S3 in private subnet + CloudFront public | Private S3 origin + CDN | Block direct S3 access; serve all content via CloudFront |
+| RDS in private subnet only | Database isolation | Production RDS should never be publicly accessible |
+| 50% removal refund | AWS over-provisioning cost | Unused resources cost money; plan before you provision |
+| Connection graph in `conns` array | IAM + VPC routing tables | Services can only communicate if policies and routes allow it |
+| Gold economy | AWS billing | Every architectural decision has a real cost implication |
 
 ---
 
 ## Roadmap
 
-The current build is v0.1 — a playable proof of concept with a working board, 12 services, and 3 missions. Planned additions:
-
 ### Near Term
 
-- **More missions** — Route53 DNS (The Cartographer), Auto Scaling Groups (the Cavalry), VPC Peering (the Alliance Treaty), ElastiCache (the Crystal Orb), API Gateway (the Drawbridge)
-- **Threat mechanics** — incorrect architectures are attacked: a public RDS gets "breached" by The Outside, a Lambda without a proper IAM Decree gets "refused entry" by the Royal Guard
-- **Tutorial mode** — guided first placement with tooltips explaining each decision
+- **More missions** — Route53 (The Cartographer), Auto Scaling Groups (the Cavalry), VPC Peering (the Alliance Treaty), ElastiCache (the Crystal Orb), API Gateway (the Drawbridge)
+- **Game phase system** — title screen → build phase → wave/threat phase → debrief, implemented as a proper state machine in the Zustand store
+- **Threat mechanics** — incorrect architectures are attacked: a public RDS gets "breached", a Lambda without an IAM Royal Decree is refused entry by the Royal Guard
 
 ### Medium Term
 
-- **Animated services** — Lambda tiles flash when "invoked," EC2 tiles pulse steadily, SQS tiles show a small raven flying to adjacent Lambda
-- **Architecture validation mode** — after placing, view a summary of what your architecture does, what it costs per month, and common anti-patterns it avoids or exhibits
-- **Multiple kingdoms (accounts)** — multi-account architectures, cross-VPC peering, Transit Gateway as a "Alliance Road"
+- **Walking characters** — Lambda ninjas move between tiles on invocation, EC2 knights patrol their subnet, Raven messages fly along connection lines. Enabled by the RAF loop already in place.
+- **`simulation.js`** — a pure tick function (pure data in → data out) that advances threat positions, checks architecture validity each frame, and emits events consumed by the store
+- **Tutorial overlay** — guided first run with tooltips explaining each placement decision
 
 ### Long Term
 
-- **Multiplayer** — two players build competing architectures; their costs and uptime are compared after a simulated "traffic event"
-- **Real cost estimator** — gold costs map to actual AWS pricing; completing missions shows the real USD equivalent of the architecture built
+- **Multiplayer** — two players build competing architectures, compared against a simulated traffic event
+- **Real cost estimator** — gold values map to actual AWS pricing; missions show the real USD equivalent of the architecture built
 - **AWS certification prep mode** — missions structured around SAA-C03 (Solutions Architect Associate) exam domains
 
 ---
 
-*CloudRealm is an educational project. AWS service names, icons, and concepts are the property of Amazon Web Services.*
+## Reading the Codebase
+
+If you want to understand how the system works:
+
+1. **`CONCEPTS.md`** — read this first. It explains every technical concept (game loops, RAF, delta time, canvas drawing, hex maths, React hooks, Zustand, the stale closure problem, camera transforms) from scratch.
+2. **`src/game/hexGrid.js`** — the coordinate maths. Start here for the hex grid.
+3. **`src/game/sprites.js`** — how drawing works. Concrete, visual, easy to follow.
+4. **`src/store/gameStore.js`** — all state and actions. The single source of truth.
+5. **`src/components/GameBoard.jsx`** — where the RAF loop, camera, and input handling live.
+
+---
+
+*CloudRealm is an educational project. AWS service names and concepts are the property of Amazon Web Services.*
