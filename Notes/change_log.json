@@ -1,0 +1,326 @@
+{
+  "project": {
+    "name": "CloudRealm",
+    "type": "browser_game",
+    "tagline": "AWS Fantasy RPG — learn cloud architecture through tabletop board placement",
+    "primary_file": "aws-rpg.html",
+    "supporting_files": ["README.md", "Notes/change_log.json", "Notes/implementation_notes.md"],
+    "tech_stack": ["HTML5", "CSS3", "vanilla_javascript", "google_fonts"],
+    "target_runtime": "browser_no_server_required"
+  },
+
+  "current_state": {
+    "version": "0.3.0",
+    "status": "playable_prototype",
+    "last_updated": "2026-06-01",
+    "interaction_model": "click_select_then_click_place",
+    "drag_and_drop": false,
+    "known_bugs": [],
+    "features_active": [
+      "hex_grid_11x9",
+      "zone_enforcement",
+      "service_palette_12_services",
+      "click_to_select_service",
+      "click_to_place_on_tile",
+      "valid_tile_pulse_animation",
+      "invalid_tile_dim_animation",
+      "service_removal_50pct_refund",
+      "connection_line_rendering",
+      "gold_economy",
+      "mission_system_3_missions",
+      "realtime_requirement_checking",
+      "toast_notifications",
+      "tile_inspect_panel",
+      "zone_label_overlays"
+    ],
+    "features_pending": [
+      "drag_and_drop_secondary",
+      "threat_mechanics",
+      "combat_system",
+      "tutorial_mode",
+      "animated_service_tiles",
+      "more_missions",
+      "route53_mission",
+      "auto_scaling_mission",
+      "vpc_peering_mission",
+      "cost_estimator",
+      "multiplayer"
+    ]
+  },
+
+  "game_world": {
+    "concept": "VPC as walled kingdom; AWS services as fantasy characters and structures",
+    "zones": {
+      "outer_realm": {
+        "terrain_id": "outside",
+        "aws_equivalent": "public_internet",
+        "placeable": false
+      },
+      "vpc_wall": {
+        "terrain_id": "wall",
+        "aws_equivalent": "vpc_boundary_security_group_perimeter",
+        "placeable": false,
+        "notes": "Structural only. Wall tiles show hatched pattern."
+      },
+      "vpc_gate": {
+        "terrain_id": "vpc-gate",
+        "aws_equivalent": "igw_attachment_point",
+        "placeable": true,
+        "accepted_services": ["igw"],
+        "notes": "Special wall tile. Only Internet Gateway can be placed here."
+      },
+      "public_subnet": {
+        "terrain_id": "public",
+        "aws_equivalent": "aws_public_subnet",
+        "placeable": true,
+        "color_hex": "#1c3018"
+      },
+      "private_subnet": {
+        "terrain_id": "private",
+        "aws_equivalent": "aws_private_subnet",
+        "placeable": true,
+        "color_hex": "#142820"
+      }
+    },
+    "grid": {
+      "columns": 11,
+      "rows": 9,
+      "offset_type": "odd-r_flat-top",
+      "private_region": {"rows": [3,4,5], "cols_approx": [3,7]},
+      "public_region":  {"rows": [2,3,4,5,6], "cols_approx": [2,8]},
+      "gate_tiles": [[1,5],[7,5]]
+    }
+  },
+
+  "services": [
+    { "id": "igw",    "fantasy": "The Iron Gate",  "aws": "Internet Gateway", "zone": "wall",    "cost": 0,  "max": 1, "connections": ["alb","ec2","cf"] },
+    { "id": "cf",     "fantasy": "Far Watcher",    "aws": "CloudFront",       "zone": "public",  "cost": 5,  "max": 2, "connections": ["alb","s3"] },
+    { "id": "alb",    "fantasy": "Siege Shield",   "aws": "Load Balancer",    "zone": "public",  "cost": 15, "max": 2, "connections": ["ec2","ecs","lambda"] },
+    { "id": "ec2",    "fantasy": "Iron Knight",    "aws": "EC2 Instance",     "zone": "public",  "cost": 20, "max": 4, "connections": ["rds","sqs","s3","alb"] },
+    { "id": "ecs",    "fantasy": "The Barracks",   "aws": "ECS / Fargate",    "zone": "public",  "cost": 12, "max": 3, "connections": ["rds","sqs","s3"] },
+    { "id": "nat",    "fantasy": "Secret Tunnel",  "aws": "NAT Gateway",      "zone": "public",  "cost": 10, "max": 1, "connections": ["lambda","ecs"] },
+    { "id": "lambda", "fantasy": "Shadow Ninja",   "aws": "Lambda Function",  "zone": "private", "cost": 0,  "max": 6, "connections": ["sqs","rds","s3","dynamo"] },
+    { "id": "rds",    "fantasy": "Great Library",  "aws": "RDS Database",     "zone": "private", "cost": 25, "max": 2, "connections": ["ec2","ecs","lambda"] },
+    { "id": "dynamo", "fantasy": "Ancient Ruins",  "aws": "DynamoDB",         "zone": "private", "cost": 5,  "max": 3, "connections": ["lambda","ec2","ecs"] },
+    { "id": "s3",     "fantasy": "Endless Vault",  "aws": "S3 Bucket",        "zone": "private", "cost": 2,  "max": 4, "connections": ["cf","ec2","lambda","ecs"] },
+    { "id": "sqs",    "fantasy": "Raven Queue",    "aws": "SQS Queue",        "zone": "private", "cost": 1,  "max": 4, "connections": ["lambda","ec2","ecs"] },
+    { "id": "iam",    "fantasy": "Royal Decree",   "aws": "IAM Role",         "zone": "any",     "cost": 0,  "max": 8, "connections": [] }
+  ],
+
+  "missions": [
+    {
+      "id": 0,
+      "name": "The First Bastion",
+      "reward_gold": 30,
+      "aws_concept_taught": "three_tier_web_architecture_entry_point",
+      "requirements": [
+        { "service": "igw",    "zone": "wall",   "constraint": "placed" },
+        { "service": "ec2",    "zone": "public", "constraint": "placed" },
+        { "service": "alb",    "zone": "public", "constraint": "placed" }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "The Serverless Scout",
+      "reward_gold": 40,
+      "aws_concept_taught": "sqs_triggered_lambda_event_driven_pipeline",
+      "requirements": [
+        { "service": "lambda", "zone": "private", "constraint": "placed" },
+        { "service": "sqs",    "zone": "private", "constraint": "placed" },
+        { "service": "lambda_sqs", "zone": null,  "constraint": "adjacent_tiles" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "The Eternal Archive",
+      "reward_gold": 50,
+      "aws_concept_taught": "s3_cloudfront_cdn_with_rds_metadata_store",
+      "requirements": [
+        { "service": "s3",  "zone": "private", "constraint": "placed" },
+        { "service": "cf",  "zone": "public",  "constraint": "placed" },
+        { "service": "rds", "zone": "private", "constraint": "placed" }
+      ]
+    }
+  ],
+
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "date": "2026-06-01",
+      "session_phase": "design",
+      "title": "World design and concept",
+      "summary": "Initial concept defined in prior session. Established the core fantasy-to-AWS mapping (VPC as kingdom, Lambda as ninja, EC2 as knight, etc.). Produced a world design bible.",
+      "changes": [
+        { "type": "design", "description": "Defined VPC = kingdom wall concept" },
+        { "type": "design", "description": "Mapped 12 AWS services to fantasy characters/structures" },
+        { "type": "design", "description": "Established public/private subnet zone duality (Outer City vs Inner Sanctum)" },
+        { "type": "design", "description": "Defined gold economy metaphor for AWS compute costs" }
+      ],
+      "files_affected": [],
+      "decisions": [
+        "Lambda costs 0 gold idle — reflects serverless per-invocation pricing",
+        "EC2 costs 20 gold/hr — reflects always-on compute billing",
+        "IGW costs 0 gold — reflects real AWS pricing"
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "date": "2026-06-01",
+      "session_phase": "ui_exploration",
+      "title": "UI style selection",
+      "summary": "Presented four UI directions to the user via visual mockups: Kingdom Map, Side-scrolling RPG, Card Battle, RPG Dashboard. User selected hex tile board.",
+      "changes": [
+        { "type": "design", "description": "Rejected top-down map, side-scroller, card battle, and dashboard styles" },
+        { "type": "design", "description": "Selected hexagonal tile board — classic tabletop boardgame aesthetic" }
+      ],
+      "files_affected": [],
+      "decisions": [
+        "Hex tiles chosen over square grid for organic tabletop feel and natural 6-neighbor adjacency",
+        "3D board concept preferred — user wants to 'place items onto a board to build their cloud environment'"
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-06-01",
+      "session_phase": "initial_build",
+      "title": "First playable build — v0.2.0",
+      "summary": "Built the complete game as a single HTML file. Hex grid, service palette, drag-and-drop placement, connection lines, gold economy, and 3-mission system.",
+      "changes": [
+        { "type": "feature", "description": "11×9 hex grid with odd-r offset coordinate system" },
+        { "type": "feature", "description": "Three terrain zones: outside, wall/vpc-gate, public subnet, private subnet" },
+        { "type": "feature", "description": "12 service cards in left palette with zone badges, cost, and deploy counts" },
+        { "type": "feature", "description": "HTML5 drag-and-drop placement (set as primary interaction)" },
+        { "type": "feature", "description": "Zone enforcement in canDrop() — services rejected if wrong terrain" },
+        { "type": "feature", "description": "Gold economy: deploy costs gold, removal gives 50% refund" },
+        { "type": "feature", "description": "SVG connection lines between adjacent compatible services" },
+        { "type": "feature", "description": "3 missions with real-time requirement checking" },
+        { "type": "feature", "description": "Toast notification system" },
+        { "type": "feature", "description": "Tile inspect panel (click to see info)" },
+        { "type": "feature", "description": "Zone label overlays (PUBLIC, PRIVATE, VPC WALL)" },
+        { "type": "style",   "description": "Cinzel + Crimson Text fantasy typography via Google Fonts" },
+        { "type": "style",   "description": "Dark fantasy colour palette: #0d0f14 bg, #c9a84c gold, #4a8c3f green, #2a7a6a teal" }
+      ],
+      "files_affected": ["aws-rpg.html"],
+      "bugs_introduced": [
+        "clip-path on .hex divs blocks pointer events in hexagon corner regions",
+        "child elements inside hex tiles absorb dragover/dragleave events before the hex div",
+        "drag-and-drop state.dragging can desync during scroll"
+      ]
+    },
+    {
+      "version": "0.2.1",
+      "date": "2026-06-01",
+      "session_phase": "documentation",
+      "title": "README created",
+      "summary": "Wrote a comprehensive README.md covering concept, gameplay, all 12 services, 3 missions, game mechanics, technical architecture, educational outcomes table, and roadmap.",
+      "changes": [
+        { "type": "docs", "description": "README.md written — ~1800 words covering all game systems" },
+        { "type": "docs", "description": "Educational outcomes table: game mechanic → AWS concept → real-world relevance" },
+        { "type": "docs", "description": "Technical architecture section: hex CSS approach, drag-and-drop impl, state model" },
+        { "type": "docs", "description": "Roadmap section: near/medium/long term features including SAA-C03 prep mode" }
+      ],
+      "files_affected": ["README.md"]
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-06-01",
+      "session_phase": "bug_fix",
+      "title": "Placement interaction overhaul — fix unresponsive tiles",
+      "summary": "User reported inability to place services on tiles. Root cause analysis identified three stacked bugs. Replaced drag-and-drop with click-select-then-place model. Rewrote hex rendering to fix pointer-events.",
+      "changes": [
+        {
+          "type": "bugfix",
+          "description": "Moved clip-path from .hex div to inner .hex-bg child div",
+          "root_cause": "CSS clip-path makes pointer events only fire inside the visible polygon. Hex corners were dead zones that rejected all mouse events.",
+          "fix": "Outer .hex div is now a plain rectangle (no clip-path) — receives all pointer events reliably. .hex-bg child handles visuals only with pointer-events:none."
+        },
+        {
+          "type": "bugfix",
+          "description": "Added .hex > * { pointer-events: none } to all hex children",
+          "root_cause": "Child elements (.wall-icon, .gate-icon, .hex-service) were catching dragover/dragleave events, firing spurious dragleave on the parent hex, preventing drop detection.",
+          "fix": "All hex children set to pointer-events:none via CSS rule. Parent hex div is the sole event target."
+        },
+        {
+          "type": "overhaul",
+          "description": "Replaced HTML5 drag-and-drop with click-select-then-click-place interaction model",
+          "root_cause": "Drag-and-drop is unreliable across panel boundaries, clip-path, and scrollable containers. state.dragging reference can desync.",
+          "fix": "New interaction: click service card to select it (gold border highlight), valid tiles pulse animation, invalid tiles dim, click a tile to place, click ✕ or board background to cancel. Much more reliable and discoverable."
+        },
+        {
+          "type": "feature",
+          "description": "Added select-hint banner in palette showing currently selected service with cancel button"
+        },
+        {
+          "type": "feature",
+          "description": "Valid tile pulse animation (brightness 1.5 → 2.4) and invalid tile dim (opacity 0.45) when service selected"
+        },
+        {
+          "type": "feature",
+          "description": "Detailed error toasts explaining why placement failed (wrong zone, tile occupied, max count reached, not enough gold)"
+        },
+        {
+          "type": "refactor",
+          "description": "Removed all inline onclick= attributes — replaced with addEventListener in renderGrid() and renderMissions()"
+        },
+        {
+          "type": "refactor",
+          "description": "Added .hex-tint inner div for zone colour overlay, separate from .hex-bg"
+        }
+      ],
+      "files_affected": ["aws-rpg.html"],
+      "bugs_introduced": []
+    },
+    {
+      "version": "0.3.1",
+      "date": "2026-06-01",
+      "session_phase": "documentation",
+      "title": "Notes folder created — change_log.json and implementation_notes.md",
+      "summary": "Created this change log and a human-readable engineering walkthrough in the Notes subfolder.",
+      "changes": [
+        { "type": "docs", "description": "Notes/change_log.json — AI-optimised structured project history and state" },
+        { "type": "docs", "description": "Notes/implementation_notes.md — human engineer walkthrough with rationale" }
+      ],
+      "files_affected": ["Notes/change_log.json", "Notes/implementation_notes.md"]
+    }
+  ],
+
+  "architecture_snapshot": {
+    "file": "aws-rpg.html",
+    "size_approx_lines": 620,
+    "structure": {
+      "css_variables": ["--bg", "--bg2", "--bg3", "--border", "--border2", "--text", "--text2", "--text3", "--gold", "--gold2", "--green", "--green2", "--teal", "--teal2", "--purple", "--red", "--hex-size", "--hex-h", "--hex-gap"],
+      "layout": "three_column_grid: 224px | 1fr | 264px",
+      "panels": ["#palette (left)", "#board-area (center)", "#missions-panel (right)"],
+      "state_object_keys": ["grid", "placed", "selectedServiceId", "gold", "completedMissions", "activeMission"],
+      "render_functions": ["renderGrid", "renderPalette", "renderMissions", "renderConnections", "renderZoneLabels"],
+      "interaction_functions": ["selectService", "clearSelection", "canPlace", "placeService", "removeService", "onInspect"],
+      "utility_functions": ["buildGrid", "hexId", "getPlacedCount", "getNeighbors", "checkAdjacent", "getHexCenter", "updateCounters", "showToast", "checkMissions"]
+    }
+  },
+
+  "design_principles": [
+    "Every game mechanic must correspond to a real AWS behaviour or constraint",
+    "Zone placement rules are never optional — they enforce correct AWS subnet design",
+    "Gold cost reflects real AWS billing model (EC2 = always-on cost, Lambda = zero idle cost)",
+    "Connection lines are only drawn for architecturally valid service pairs",
+    "Single HTML file — zero install friction, runs in any browser",
+    "No frameworks — vanilla JS for portability and readability"
+  ],
+
+  "context_for_ai": {
+    "how_to_read_this_file": "Use changelog array for sequential history. Use current_state.features_active to know what exists. Use current_state.features_pending for roadmap. Use architecture_snapshot for code navigation. Use services and missions arrays as ground truth for game data.",
+    "next_likely_tasks": [
+      "Add more missions (Route53, Auto Scaling, VPC Peering)",
+      "Add threat/attack mechanics for incorrect architectures",
+      "Add animated service tiles (Lambda flashes on invoke, EC2 pulses steadily)",
+      "Add tutorial overlay for first-time players",
+      "Improve visual quality of hex tiles with illustrated backgrounds"
+    ],
+    "critical_constraints": [
+      "Must remain a single HTML file",
+      "All game mechanics must accurately reflect real AWS behaviour",
+      "Interaction model is click-select-then-click-place (not drag-and-drop)",
+      "Hex pointer events rely on .hex-bg having clip-path and .hex > * having pointer-events:none — do not remove these"
+    ]
+  }
+}
