@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudRealm — AWS Fantasy RPG</title>
+<link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --bg2: #161922;
+    --bg3: #1e2230;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8e0cc;
+    --text2: #9a9080;
+    --text3: #5a5248;
+    --gold: #c9a84c;
+    --gold2: #f0cc70;
+    --green: #4a8c3f;
+    --green2: #6ab85e;
+    --teal: #2a7a6a;
+    --teal2: #3db896;
+    --purple: #6a4a9c;
+    --red: #8c3a3a;
+    --blue: #3a5a8c;
+    --orange: #8c5a2a;
+
+    --hex-size: 52px;
+    --hex-gap: 3px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Crimson Text', Georgia, serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border2);
+    padding: 0 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+  #topbar h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--gold2);
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(201,168,76,0.4);
+    white-space: nowrap;
+  }
+  .topbar-divider { width: 1px; height: 24px; background: var(--border); }
+  #mission-title {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    color: var(--gold);
+    flex: 1;
+  }
+  #mission-title span { color: var(--text2); font-family: 'Crimson Text', serif; font-size: 14px; margin-left: 8px; }
+
+  #score-area { display: flex; gap: 16px; align-items: center; }
+  .score-pill {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .score-pill .val { color: var(--gold2); font-weight: 600; font-family: 'Cinzel', serif; }
+
+  /* ── MAIN LAYOUT ── */
+  #main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    overflow: hidden;
+  }
+
+  /* ── LEFT PANEL: SERVICE PALETTE ── */
+  #palette {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  #service-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+
+  .service-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: grab;
+    transition: border-color 0.15s, transform 0.1s;
+    user-select: none;
+    position: relative;
+  }
+  .service-card:hover { border-color: var(--border2); transform: translateX(2px); }
+  .service-card.dragging { opacity: 0.5; }
+  .service-card[data-zone="public"] { border-left: 3px solid var(--green); }
+  .service-card[data-zone="private"] { border-left: 3px solid var(--teal); }
+  .service-card[data-zone="any"] { border-left: 3px solid var(--gold); }
+  .service-card[data-zone="edge"] { border-left: 3px solid var(--purple); }
+
+  .sc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .sc-icon { font-size: 20px; line-height: 1; }
+  .sc-names { flex: 1; min-width: 0; }
+  .sc-fantasy { font-family: 'Cinzel', serif; font-size: 11px; color: var(--gold2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-aws { font-size: 10px; color: var(--text3); font-family: monospace; }
+  .sc-desc { font-size: 11px; color: var(--text2); line-height: 1.4; }
+  .sc-zone-badge {
+    position: absolute; top: 6px; right: 6px;
+    font-size: 9px; padding: 1px 5px; border-radius: 4px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.5px;
+  }
+  .badge-public { background: rgba(74,140,63,0.2); color: var(--green2); border: 0.5px solid var(--green); }
+  .badge-private { background: rgba(42,122,106,0.2); color: var(--teal2); border: 0.5px solid var(--teal); }
+  .badge-any { background: rgba(201,168,76,0.15); color: var(--gold); border: 0.5px solid rgba(201,168,76,0.3); }
+  .badge-edge { background: rgba(106,74,156,0.2); color: #a080e0; border: 0.5px solid var(--purple); }
+
+  .sc-count { font-size: 10px; color: var(--text3); margin-top: 3px; }
+  .sc-count .used { color: var(--red); }
+
+  /* ── CENTER: BOARD ── */
+  #board-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 30% 30%, rgba(74,140,63,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 70% 70%, rgba(42,122,106,0.04) 0%, transparent 50%);
+  }
+
+  #board-wrap {
+    position: relative;
+  }
+
+  #hex-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--hex-gap);
+    align-items: flex-start;
+  }
+
+  .hex-row {
+    display: flex;
+    gap: var(--hex-gap);
+  }
+  .hex-row.offset { margin-left: calc(var(--hex-size) / 2 + var(--hex-gap) / 2); }
+
+  .hex {
+    width: var(--hex-size);
+    height: calc(var(--hex-size) * 0.866);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    position: relative;
+    cursor: default;
+    transition: filter 0.12s;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Terrain types */
+  .hex.terrain-void    { background: #0a0c10; }
+  .hex.terrain-outside { background: #1a1c22; cursor: not-allowed; }
+  .hex.terrain-wall    { background: #1e2e18; cursor: not-allowed; }
+  .hex.terrain-public  { background: #1c2e18; cursor: pointer; }
+  .hex.terrain-private { background: #142820; cursor: pointer; }
+  .hex.terrain-vpc-gate { background: #1e2e18; cursor: not-allowed; }
+
+  .hex.terrain-public:hover  { filter: brightness(1.4); }
+  .hex.terrain-private:hover { filter: brightness(1.4); }
+  .hex.terrain-public.drag-over  { filter: brightness(1.8); }
+  .hex.terrain-private.drag-over { filter: brightness(1.8); }
+
+  .hex.occupied { cursor: pointer; }
+
+  /* Hex glow rings for zones */
+  .hex.terrain-public::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: rgba(74,140,63,0.08);
+    pointer-events: none;
+  }
+  .hex.terrain-private::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: rgba(42,122,106,0.08);
+    pointer-events: none;
+  }
+  .hex.terrain-wall::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: repeating-linear-gradient(
+      45deg,
+      transparent, transparent 4px,
+      rgba(74,140,63,0.12) 4px, rgba(74,140,63,0.12) 5px
+    );
+  }
+  .hex.terrain-vpc-gate::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: rgba(201,168,76,0.07);
+  }
+
+  /* Placed service on hex */
+  .hex-service {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .hex-service-icon { font-size: 20px; line-height: 1; }
+  .hex-service-name { font-size: 8px; font-family: 'Cinzel', serif; color: var(--gold2); text-align: center; line-height: 1; white-space: nowrap; }
+
+  /* Connection SVG overlay */
+  #connections-svg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .hex-label {
+    font-size: 8px;
+    color: rgba(255,255,255,0.15);
+    font-family: monospace;
+    pointer-events: none;
+  }
+
+  /* Wall marker */
+  .wall-icon { font-size: 14px; opacity: 0.4; }
+  .gate-icon { font-size: 16px; opacity: 0.6; }
+
+  /* Highlight for mission req */
+  .hex.req-highlight {
+    filter: brightness(1.6);
+    animation: pulse-hex 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes pulse-hex {
+    from { filter: brightness(1.4); }
+    to   { filter: brightness(2.0); }
+  }
+
+  /* ── RIGHT PANEL: MISSIONS ── */
+  #missions-panel {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .mission-card {
+    margin: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .mission-card.active { border-color: var(--gold); }
+  .mission-card.complete { border-color: var(--green2); }
+
+  .mission-header {
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
+  }
+  .mission-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    color: var(--gold);
+    flex-shrink: 0;
+  }
+  .mission-name {
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    color: var(--text);
+    flex: 1;
+  }
+  .mission-status { font-size: 14px; }
+
+  .mission-body {
+    padding: 0 12px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .mission-lore {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    font-style: italic;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+
+  .mission-reqs { display: flex; flex-direction: column; gap: 6px; }
+  .req-item {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px;
+    padding: 5px 8px;
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .req-item.satisfied { border-color: var(--green); }
+  .req-item.satisfied .req-check { color: var(--green2); }
+  .req-item .req-check { color: var(--text3); font-size: 14px; flex-shrink: 0; }
+  .req-item .req-text { flex: 1; color: var(--text2); line-height: 1.3; }
+  .req-item .req-icon { font-size: 14px; }
+
+  .mission-launch {
+    margin-top: 10px;
+    width: 100%;
+    padding: 8px;
+    background: linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.08));
+    border: 1px solid rgba(201,168,76,0.4);
+    border-radius: 6px;
+    color: var(--gold2);
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 0.5px;
+  }
+  .mission-launch:hover { background: rgba(201,168,76,0.25); }
+  .mission-launch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* legend */
+  #legend {
+    margin: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .legend-title { font-family: 'Cinzel', serif; font-size: 10px; color: var(--text3); letter-spacing: 1px; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 11px; color: var(--text2); }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+  /* Board zone labels */
+  .zone-label-overlay {
+    position: absolute;
+    pointer-events: none;
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    letter-spacing: 1px;
+    opacity: 0.5;
+  }
+
+  /* Toast / notification */
+  #toast {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(60px);
+    background: var(--bg2);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    color: var(--gold2);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    z-index: 100;
+    text-align: center;
+    min-width: 200px;
+  }
+  #toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  #toast.success { border-color: var(--green2); color: var(--green2); }
+
+  /* selected hex info */
+  #hex-info {
+    margin: 8px;
+    padding: 10px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text2);
+    min-height: 60px;
+  }
+  #hex-info .hi-title { font-family: 'Cinzel', serif; font-size: 11px; color: var(--gold); margin-bottom: 4px; }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>☽ CloudRealm</h1>
+  <div class="topbar-divider"></div>
+  <div id="mission-title">
+    Mission I — <span id="mission-subtitle">The First Bastion</span>
+  </div>
+  <div id="score-area">
+    <div class="score-pill">⚔️ Deployed <span class="val" id="deployed-count">0</span></div>
+    <div class="score-pill">✅ Complete <span class="val" id="complete-count">0</span>/3</div>
+    <div class="score-pill">🪙 Gold <span class="val" id="gold-count">100</span></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- LEFT: PALETTE -->
+  <div id="palette">
+    <div class="panel-header">⚔ Service Roster</div>
+    <div id="service-list"></div>
+  </div>
+
+  <!-- CENTER: BOARD -->
+  <div id="board-area">
+    <div id="board-wrap">
+      <div id="hex-grid"></div>
+      <svg id="connections-svg"></svg>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <!-- RIGHT: MISSIONS -->
+  <div id="missions-panel">
+    <div class="panel-header">📜 Missions</div>
+    <div id="missions-list"></div>
+    <div id="hex-info"><div class="hi-title">Selected Tile</div><div id="hex-info-body">Click a tile to inspect it.</div></div>
+    <div id="legend">
+      <div class="legend-title">Map Legend</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1c2e18;border:1px solid #4a8c3f;"></div>Public Subnet (Outer City)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#142820;border:1px solid #2a7a6a;"></div>Private Subnet (Inner Sanctum)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1e2e18;border:1px solid #3a4a38;"></div>VPC Wall</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1a1c22;border:1px solid #2a2c32;"></div>The Outer Realm (internet)</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────
+
+const SERVICES = [
+  {
+    id: 'igw',
+    icon: '🌐',
+    fantasy: 'The Iron Gate',
+    aws: 'Internet Gateway',
+    desc: 'Opens the kingdom to the Outer Realm.',
+    zone: 'wall',
+    cost: 0,
+    maxCount: 1,
+    connections: ['alb','ec2','cf'],
+  },
+  {
+    id: 'cf',
+    icon: '👁',
+    fantasy: 'Far Watcher',
+    aws: 'CloudFront',
+    desc: 'Watches the realm\'s edges; speeds delivery.',
+    zone: 'public',
+    cost: 5,
+    maxCount: 2,
+    connections: ['alb','s3'],
+  },
+  {
+    id: 'alb',
+    icon: '🛡',
+    fantasy: 'Siege Shield',
+    aws: 'Load Balancer',
+    desc: 'Splits incoming armies across the knights.',
+    zone: 'public',
+    cost: 15,
+    maxCount: 2,
+    connections: ['ec2','ecs','lambda'],
+  },
+  {
+    id: 'ec2',
+    icon: '⚔️',
+    fantasy: 'Iron Knight',
+    aws: 'EC2 Instance',
+    desc: 'Always on guard. Costs gold every hour.',
+    zone: 'public',
+    cost: 20,
+    maxCount: 4,
+    connections: ['rds','sqs','s3','alb'],
+  },
+  {
+    id: 'ecs',
+    icon: '🪖',
+    fantasy: 'The Barracks',
+    aws: 'ECS / Fargate',
+    desc: 'Identical soldiers, deployed at scale.',
+    zone: 'public',
+    cost: 12,
+    maxCount: 3,
+    connections: ['rds','sqs','s3'],
+  },
+  {
+    id: 'lambda',
+    icon: '🥷',
+    fantasy: 'Shadow Ninja',
+    aws: 'Lambda Function',
+    desc: 'Appears only when summoned. No idle cost.',
+    zone: 'private',
+    cost: 0,
+    maxCount: 6,
+    connections: ['sqs','rds','s3','dynamo'],
+  },
+  {
+    id: 'nat',
+    icon: '🌀',
+    fantasy: 'Secret Tunnel',
+    aws: 'NAT Gateway',
+    desc: 'Private forces venture out anonymously.',
+    zone: 'public',
+    cost: 10,
+    maxCount: 1,
+    connections: ['lambda','ecs'],
+  },
+  {
+    id: 'rds',
+    icon: '📚',
+    fantasy: 'Great Library',
+    aws: 'RDS Database',
+    desc: 'Structured knowledge; Primary & Replica scribes.',
+    zone: 'private',
+    cost: 25,
+    maxCount: 2,
+    connections: ['ec2','ecs','lambda'],
+  },
+  {
+    id: 'dynamo',
+    icon: '🗿',
+    fantasy: 'Ancient Ruins',
+    aws: 'DynamoDB',
+    desc: 'Chaotic, fast, never sleeps.',
+    zone: 'private',
+    cost: 5,
+    maxCount: 3,
+    connections: ['lambda','ec2','ecs'],
+  },
+  {
+    id: 's3',
+    icon: '🏛',
+    fantasy: 'Endless Vault',
+    aws: 'S3 Bucket',
+    desc: 'Stores every artifact. Infinite capacity.',
+    zone: 'private',
+    cost: 2,
+    maxCount: 4,
+    connections: ['cf','ec2','lambda','ecs'],
+  },
+  {
+    id: 'sqs',
+    icon: '🐦',
+    fantasy: 'Raven Queue',
+    aws: 'SQS Queue',
+    desc: 'Messages fly between services reliably.',
+    zone: 'private',
+    cost: 1,
+    maxCount: 4,
+    connections: ['lambda','ec2','ecs'],
+  },
+  {
+    id: 'iam',
+    icon: '📜',
+    fantasy: 'Royal Decree',
+    aws: 'IAM Role',
+    desc: 'Every character needs a permission scroll.',
+    zone: 'any',
+    cost: 0,
+    maxCount: 8,
+    connections: [],
+  },
+];
+
+const MISSIONS = [
+  {
+    id: 0,
+    name: 'The First Bastion',
+    lore: 'A lone knight must guard the realm\'s gate. The kingdom has no defenses — place an Iron Knight in the Outer City and open the Iron Gate so travelers may enter.',
+    requirements: [
+      { id: 'req-igw',    text: 'Place the Iron Gate (IGW) on a wall tile', icon: '🌐', check: (state) => state.placed.some(p => p.serviceId === 'igw') },
+      { id: 'req-ec2',    text: 'Deploy at least one Iron Knight (EC2) in the public subnet', icon: '⚔️', check: (state) => state.placed.some(p => p.serviceId === 'ec2' && p.zone === 'public') },
+      { id: 'req-alb',    text: 'Station a Siege Shield (Load Balancer) in the public subnet', icon: '🛡', check: (state) => state.placed.some(p => p.serviceId === 'alb' && p.zone === 'public') },
+    ],
+    reward: 30,
+  },
+  {
+    id: 1,
+    name: 'The Serverless Scout',
+    lore: 'The Shadow Ninjas work best through the Raven Queue — they are summoned by messages, strike, and vanish. Build a serverless pipeline in the Inner Sanctum.',
+    requirements: [
+      { id: 'req-lambda',  text: 'Place a Shadow Ninja (Lambda) in the private subnet', icon: '🥷', check: (state) => state.placed.some(p => p.serviceId === 'lambda' && p.zone === 'private') },
+      { id: 'req-sqs',     text: 'Deploy a Raven Queue (SQS) in the private subnet', icon: '🐦', check: (state) => state.placed.some(p => p.serviceId === 'sqs' && p.zone === 'private') },
+      { id: 'req-adj',     text: 'Lambda and SQS must be on adjacent tiles', icon: '🔗', check: (state) => checkAdjacent(state, 'lambda', 'sqs') },
+    ],
+    reward: 40,
+  },
+  {
+    id: 2,
+    name: 'The Eternal Archive',
+    lore: 'The scholars demand their scrolls be accessible to all corners of the realm — swiftly. Link the Endless Vault to the Far Watcher so artifacts are cached at the kingdom\'s edge.',
+    requirements: [
+      { id: 'req-s3',   text: 'Place the Endless Vault (S3) in the private subnet', icon: '🏛', check: (state) => state.placed.some(p => p.serviceId === 's3' && p.zone === 'private') },
+      { id: 'req-cf',   text: 'Station a Far Watcher (CloudFront) in the public subnet', icon: '👁', check: (state) => state.placed.some(p => p.serviceId === 'cf' && p.zone === 'public') },
+      { id: 'req-lib',  text: 'Protect knowledge with the Great Library (RDS) in private subnet', icon: '📚', check: (state) => state.placed.some(p => p.serviceId === 'rds' && p.zone === 'private') },
+    ],
+    reward: 50,
+  },
+];
+
+// ─────────────────────────────────────────
+// HEX GRID DEFINITION
+// T = terrain type
+// Terrain: 0=void, 1=outside/internet, 2=wall, 3=public, 4=private, 5=vpc-gate
+// ─────────────────────────────────────────
+
+// Grid: 11 cols, 9 rows
+// Row offset: even rows are offset (flat-top odd-r)
+const COLS = 11;
+const ROWS = 9;
+
+// Define zones by region
+// We'll build the map programmatically
+function buildGridMap() {
+  // Initialize all as outside
+  const grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid.push([]);
+    for (let c = 0; c < COLS; c++) {
+      grid[r].push({ terrain: 'outside', service: null });
+    }
+  }
+
+  // VPC boundary (wall tiles): rows 1-7, cols 2-8 roughly, oval-ish
+  const vpcShape = [
+    [1, [2,8]],
+    [2, [1,9]],
+    [3, [1,9]],
+    [4, [1,9]],
+    [5, [1,9]],
+    [6, [1,9]],
+    [7, [2,8]],
+  ];
+  for (const [row, [cMin, cMax]] of vpcShape) {
+    for (let c = cMin; c <= cMax; c++) {
+      grid[row][c].terrain = 'wall';
+    }
+  }
+
+  // Public subnet: one ring inside wall
+  const pubShape = [
+    [2, [2,8]],
+    [3, [2,8]],
+    [4, [2,8]],
+    [5, [2,8]],
+    [6, [2,8]],
+  ];
+  for (const [row, [cMin, cMax]] of pubShape) {
+    for (let c = cMin; c <= cMax; c++) {
+      grid[row][c].terrain = 'public';
+    }
+  }
+
+  // Private subnet: inner region
+  const privShape = [
+    [3, [4,7]],
+    [4, [3,7]],
+    [5, [4,7]],
+  ];
+  for (const [row, [cMin, cMax]] of privShape) {
+    for (let c = cMin; c <= cMax; c++) {
+      grid[row][c].terrain = 'private';
+    }
+  }
+
+  // VPC gate tiles (special wall tiles where IGW lives)
+  grid[1][5].terrain = 'vpc-gate';
+  grid[7][5].terrain = 'vpc-gate';
+
+  return grid;
+}
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+
+const state = {
+  grid: buildGridMap(),
+  placed: [],           // [{hexId, serviceId, zone, row, col}]
+  dragging: null,       // serviceId being dragged
+  gold: 100,
+  completedMissions: new Set(),
+  activeMission: 0,
+};
+
+// Service counts helper
+function getPlacedCount(serviceId) {
+  return state.placed.filter(p => p.serviceId === serviceId).length;
+}
+
+// Adjacency check for hex grid
+function getHexNeighbors(row, col) {
+  const isOffset = row % 2 === 1;
+  const dirs = isOffset
+    ? [[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]]
+    : [[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]];
+  return dirs.map(([dr, dc]) => [row+dr, col+dc])
+             .filter(([r,c]) => r >= 0 && r < ROWS && c >= 0 && c < COLS);
+}
+
+function checkAdjacent(state, serviceA, serviceB) {
+  const pA = state.placed.filter(p => p.serviceId === serviceA);
+  const pB = state.placed.filter(p => p.serviceId === serviceB);
+  for (const a of pA) {
+    const neighbors = getHexNeighbors(a.row, a.col);
+    for (const b of pB) {
+      if (neighbors.some(([r,c]) => r === b.row && c === b.col)) return true;
+    }
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────
+// RENDER PALETTE
+// ─────────────────────────────────────────
+
+function renderPalette() {
+  const list = document.getElementById('service-list');
+  list.innerHTML = '';
+  for (const svc of SERVICES) {
+    const placed = getPlacedCount(svc.id);
+    const maxed = placed >= svc.maxCount;
+    const card = document.createElement('div');
+    card.className = 'service-card' + (maxed ? ' maxed' : '');
+    card.dataset.serviceId = svc.id;
+    card.dataset.zone = svc.zone;
+    card.draggable = !maxed;
+
+    const zoneBadgeClass = svc.zone === 'public' ? 'badge-public'
+                         : svc.zone === 'private' ? 'badge-private'
+                         : svc.zone === 'any' ? 'badge-any'
+                         : svc.zone === 'wall' ? 'badge-edge'
+                         : 'badge-edge';
+    const zoneLabel = svc.zone === 'public' ? 'Public'
+                    : svc.zone === 'private' ? 'Private'
+                    : svc.zone === 'wall' ? 'Gate'
+                    : 'Any';
+
+    card.innerHTML = `
+      <div class="sc-zone-badge ${zoneBadgeClass}">${zoneLabel}</div>
+      <div class="sc-top">
+        <div class="sc-icon">${svc.icon}</div>
+        <div class="sc-names">
+          <div class="sc-fantasy">${svc.fantasy}</div>
+          <div class="sc-aws">${svc.aws}</div>
+        </div>
+      </div>
+      <div class="sc-desc">${svc.desc}</div>
+      <div class="sc-count">${maxed ? '<span class="used">All deployed</span>' : `${placed}/${svc.maxCount} deployed · 🪙${svc.cost}/hr`}</div>
+    `;
+
+    card.addEventListener('dragstart', e => {
+      if (maxed) { e.preventDefault(); return; }
+      state.dragging = svc.id;
+      card.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', svc.id);
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      state.dragging = null;
+    });
+
+    list.appendChild(card);
+  }
+}
+
+// ─────────────────────────────────────────
+// RENDER HEX GRID
+// ─────────────────────────────────────────
+
+function hexId(r, c) { return `hex-${r}-${c}`; }
+
+function renderGrid() {
+  const gridEl = document.getElementById('hex-grid');
+  gridEl.innerHTML = '';
+
+  for (let r = 0; r < ROWS; r++) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'hex-row' + (r % 2 === 1 ? ' offset' : '');
+
+    for (let c = 0; c < COLS; c++) {
+      const cell = state.grid[r][c];
+      const hex = document.createElement('div');
+      hex.className = `hex terrain-${cell.terrain}`;
+      hex.id = hexId(r, c);
+      hex.dataset.row = r;
+      hex.dataset.col = c;
+
+      // Content
+      if (cell.service) {
+        const svc = SERVICES.find(s => s.id === cell.service);
+        hex.classList.add('occupied');
+        hex.innerHTML = `
+          <div class="hex-service">
+            <div class="hex-service-icon">${svc.icon}</div>
+            <div class="hex-service-name">${svc.fantasy.split(' ')[0]}</div>
+          </div>
+        `;
+      } else if (cell.terrain === 'wall') {
+        hex.innerHTML = `<div class="wall-icon">🌿</div>`;
+      } else if (cell.terrain === 'vpc-gate') {
+        hex.innerHTML = `<div class="gate-icon">🚪</div>`;
+      }
+
+      // Drop events
+      if (cell.terrain === 'public' || cell.terrain === 'private' || cell.terrain === 'vpc-gate' || cell.terrain === 'wall') {
+        hex.addEventListener('dragover', e => {
+          e.preventDefault();
+          if (canDrop(r, c)) {
+            hex.classList.add('drag-over');
+            e.dataTransfer.dropEffect = 'copy';
+          } else {
+            e.dataTransfer.dropEffect = 'none';
+          }
+        });
+        hex.addEventListener('dragleave', () => hex.classList.remove('drag-over'));
+        hex.addEventListener('drop', e => {
+          e.preventDefault();
+          hex.classList.remove('drag-over');
+          const serviceId = e.dataTransfer.getData('text/plain') || state.dragging;
+          if (serviceId && canDrop(r, c, serviceId)) {
+            placeService(r, c, serviceId);
+          }
+        });
+      }
+
+      // Click to inspect or remove
+      hex.addEventListener('click', () => onHexClick(r, c));
+
+      rowEl.appendChild(hex);
+    }
+    gridEl.appendChild(rowEl);
+  }
+}
+
+function canDrop(r, c, serviceId) {
+  const svcId = serviceId || state.dragging;
+  if (!svcId) return false;
+  const cell = state.grid[r][c];
+  if (cell.service) return false; // occupied
+
+  const svc = SERVICES.find(s => s.id === svcId);
+  if (!svc) return false;
+
+  if (getPlacedCount(svcId) >= svc.maxCount) return false;
+
+  // Zone validation
+  if (svc.zone === 'public'  && cell.terrain !== 'public') return false;
+  if (svc.zone === 'private' && cell.terrain !== 'private') return false;
+  if (svc.zone === 'wall'    && cell.terrain !== 'vpc-gate' && cell.terrain !== 'wall') return false;
+  if (svc.zone === 'any'     && cell.terrain !== 'public' && cell.terrain !== 'private') return false;
+
+  return true;
+}
+
+function placeService(r, c, serviceId) {
+  const svc = SERVICES.find(s => s.id === serviceId);
+  if (!svc) return;
+
+  const cell = state.grid[r][c];
+  const zone = cell.terrain;
+
+  // Cost check
+  if (state.gold < svc.cost) {
+    showToast('Not enough gold! 🪙', false);
+    return;
+  }
+
+  cell.service = serviceId;
+  state.placed.push({ hexId: hexId(r,c), serviceId, zone, row: r, col: c });
+  state.gold -= svc.cost;
+
+  updateCounters();
+  renderGrid();
+  renderPalette();
+  renderConnections();
+  checkMissions();
+}
+
+function removeService(r, c) {
+  const cell = state.grid[r][c];
+  if (!cell.service) return;
+  const svc = SERVICES.find(s => s.id === cell.service);
+  state.placed = state.placed.filter(p => p.row !== r || p.col !== c);
+  state.gold += Math.floor(svc.cost * 0.5); // 50% refund
+  cell.service = null;
+  updateCounters();
+  renderGrid();
+  renderPalette();
+  renderConnections();
+  checkMissions();
+  showToast(`${svc.fantasy} recalled. +${Math.floor(svc.cost*0.5)}🪙 refund`);
+}
+
+function onHexClick(r, c) {
+  const cell = state.grid[r][c];
+  const infoEl = document.getElementById('hex-info-body');
+
+  if (cell.service) {
+    const svc = SERVICES.find(s => s.id === cell.service);
+    infoEl.innerHTML = `
+      <strong style="font-family:'Cinzel',serif;color:var(--gold2)">${svc.icon} ${svc.fantasy}</strong><br>
+      <span style="font-family:monospace;font-size:10px;color:var(--text3)">${svc.aws}</span><br>
+      <span style="font-size:12px;color:var(--text2)">${svc.desc}</span><br>
+      <span style="font-size:11px;color:var(--red);cursor:pointer;" onclick="removeService(${r},${c})">▸ Remove (50% gold refund)</span>
+    `;
+  } else {
+    const terrainNames = { outside:'Outer Realm', wall:'VPC Wall', public:'Public Subnet', private:'Private Subnet', 'vpc-gate':'VPC Gate', void:'Void' };
+    infoEl.innerHTML = `<span style="color:var(--text3)">${terrainNames[cell.terrain] || cell.terrain}</span><br><span style="font-size:11px">Drop a service here to place it.</span>`;
+  }
+}
+
+// ─────────────────────────────────────────
+// CONNECTIONS SVG
+// ─────────────────────────────────────────
+
+function getHexCenter(r, c) {
+  const el = document.getElementById(hexId(r, c));
+  if (!el) return [0, 0];
+  const wrap = document.getElementById('board-wrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  const hexRect = el.getBoundingClientRect();
+  return [
+    hexRect.left - wrapRect.left + hexRect.width / 2,
+    hexRect.top  - wrapRect.top  + hexRect.height / 2,
+  ];
+}
+
+function renderConnections() {
+  const svg = document.getElementById('connections-svg');
+  const wrap = document.getElementById('board-wrap');
+  svg.setAttribute('width', wrap.offsetWidth);
+  svg.setAttribute('height', wrap.offsetHeight);
+  svg.innerHTML = '';
+
+  const drawn = new Set();
+
+  for (const placed of state.placed) {
+    const svc = SERVICES.find(s => s.id === placed.serviceId);
+    const neighbors = getHexNeighbors(placed.row, placed.col);
+
+    for (const [nr, nc] of neighbors) {
+      const neighbor = state.grid[nr][nc];
+      if (!neighbor.service) continue;
+
+      const key = [placed.hexId, hexId(nr,nc)].sort().join('|');
+      if (drawn.has(key)) continue;
+      drawn.add(key);
+
+      const canConnect = svc.connections.includes(neighbor.service) ||
+        SERVICES.find(s=>s.id===neighbor.service)?.connections?.includes(placed.serviceId);
+
+      const [x1,y1] = getHexCenter(placed.row, placed.col);
+      const [x2,y2] = getHexCenter(nr, nc);
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('stroke', canConnect ? '#c9a84c' : '#5a5248');
+      line.setAttribute('stroke-width', canConnect ? '1.5' : '0.5');
+      line.setAttribute('stroke-dasharray', canConnect ? '4 3' : '2 4');
+      line.setAttribute('opacity', canConnect ? '0.55' : '0.25');
+      svg.appendChild(line);
+
+      if (canConnect) {
+        const mx = (x1+x2)/2, my = (y1+y2)/2;
+        const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx', mx); dot.setAttribute('cy', my);
+        dot.setAttribute('r', '3');
+        dot.setAttribute('fill', '#c9a84c');
+        dot.setAttribute('opacity', '0.7');
+        svg.appendChild(dot);
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+// MISSIONS
+// ─────────────────────────────────────────
+
+function renderMissions() {
+  const list = document.getElementById('missions-list');
+  list.innerHTML = '';
+
+  for (const mission of MISSIONS) {
+    const isActive = mission.id === state.activeMission;
+    const isComplete = state.completedMissions.has(mission.id);
+
+    const card = document.createElement('div');
+    card.className = `mission-card ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`;
+
+    const reqs = mission.requirements.map(req => {
+      const sat = req.check(state);
+      return `
+        <div class="req-item ${sat ? 'satisfied' : ''}">
+          <span class="req-check">${sat ? '✓' : '○'}</span>
+          <span class="req-icon">${req.icon}</span>
+          <span class="req-text">${req.text}</span>
+        </div>
+      `;
+    }).join('');
+
+    const allSat = mission.requirements.every(req => req.check(state));
+
+    card.innerHTML = `
+      <div class="mission-header" onclick="toggleMission(${mission.id})">
+        <div class="mission-num">${mission.id + 1}</div>
+        <div class="mission-name">${mission.name}</div>
+        <div class="mission-status">${isComplete ? '✅' : isActive ? '⚔️' : '🔒'}</div>
+      </div>
+      ${isActive ? `
+        <div class="mission-body">
+          <div class="mission-lore">${mission.lore}</div>
+          <div class="mission-reqs">${reqs}</div>
+          ${allSat && !isComplete ? `<button class="mission-launch" onclick="completeMission(${mission.id})">⚡ Claim Victory · +${mission.reward}🪙</button>` : ''}
+        </div>
+      ` : ''}
+    `;
+
+    list.appendChild(card);
+  }
+}
+
+function toggleMission(id) {
+  if (state.completedMissions.has(id) || id === state.activeMission) return;
+  state.activeMission = id;
+  renderMissions();
+}
+
+function completeMission(id) {
+  state.completedMissions.add(id);
+  const mission = MISSIONS.find(m => m.id === id);
+  state.gold += mission.reward;
+  state.activeMission = Math.min(id + 1, MISSIONS.length - 1);
+  updateCounters();
+  renderMissions();
+  showToast(`Mission complete! +${mission.reward}🪙`, true);
+  document.getElementById('mission-subtitle').textContent = MISSIONS[state.activeMission]?.name || 'All missions complete!';
+}
+
+function checkMissions() {
+  renderMissions();
+}
+
+// ─────────────────────────────────────────
+// COUNTERS & UI UPDATES
+// ─────────────────────────────────────────
+
+function updateCounters() {
+  document.getElementById('deployed-count').textContent = state.placed.length;
+  document.getElementById('complete-count').textContent = state.completedMissions.size;
+  document.getElementById('gold-count').textContent = state.gold;
+}
+
+let toastTimer;
+function showToast(msg, success = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (success ? ' success' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+}
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// EXPOSE GLOBALS FOR INLINE HANDLERS
+// ─────────────────────────────────────────
+window.removeService = removeService;
+window.toggleMission = toggleMission;
+window.completeMission = completeMission;
+
+// ─────────────────────────────────────────
+// ZONE LABEL OVERLAYS
+// ─────────────────────────────────────────
+function renderZoneLabels() {
+  const wrap = document.getElementById('board-wrap');
+  // Remove old labels
+  wrap.querySelectorAll('.zone-label-overlay').forEach(e => e.remove());
+
+  const addLabel = (r, c, text, color) => {
+    const [x, y] = getHexCenter(r, c);
+    const el = document.createElement('div');
+    el.className = 'zone-label-overlay';
+    el.textContent = text;
+    el.style.left = (x - 40) + 'px';
+    el.style.top = (y - 6) + 'px';
+    el.style.color = color;
+    el.style.width = '80px';
+    el.style.textAlign = 'center';
+    wrap.appendChild(el);
+  };
+
+  addLabel(1, 5, '— VPC WALL —', '#4a8c3f');
+  addLabel(2, 9, 'PUBLIC', '#4a8c3f');
+  addLabel(4, 9, 'PRIVATE', '#2a7a6a');
+}
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+
+function init() {
+  renderGrid();
+  renderPalette();
+  renderMissions();
+  updateCounters();
+
+  window.addEventListener('resize', () => {
+    renderConnections();
+    renderZoneLabels();
+  });
+
+  // After layout settles
+  setTimeout(() => {
+    renderConnections();
+    renderZoneLabels();
+  }, 150);
+}
+
+init();
+</script>
+</body>
+</html>
