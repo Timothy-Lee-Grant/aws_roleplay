@@ -99,7 +99,7 @@ export function drawHexPath(ctx, cx, cy, r = HEX_R) {
     const a = (Math.PI / 3) * i - Math.PI / 2
     const x = cx + r * Math.cos(a)
     const y = cy + r * Math.sin(a)
-    if (i === 0) ctx.moveTo(x, y) else ctx.lineTo(x, y)
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
   }
   ctx.closePath()
 }
