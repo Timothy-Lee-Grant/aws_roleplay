@@ -26,7 +26,10 @@ export const useGameStore = create((set, get) => ({
   placed:            [],            // [{ id, row, col, zone, conns }]
   selectedServiceId: null,          // currently selected service from palette
   gold:              100,
-  completedMissions: new Set(),
+  // Array (not Set) — Zustand shallow-equality compares by reference.
+  // A mutated Set is the same object reference, so Zustand can't detect .add().
+  // An array spread ([...completedMissions, id]) creates a new reference → detected.
+  completedMissions: [],
   activeMission:     0,
 
   // ── Camera (pan + zoom for the canvas) ─────────────────────────────────────
@@ -152,13 +155,10 @@ export const useGameStore = create((set, get) => ({
   completeMission(id) {
     const { completedMissions, gold, activeMission } = get()
     const mission = MISSIONS.find(m => m.id === id)
-    if (!mission || completedMissions.has(id)) return
-
-    const next = new Set(completedMissions)
-    next.add(id)
+    if (!mission || completedMissions.includes(id)) return
 
     set({
-      completedMissions: next,
+      completedMissions: [...completedMissions, id],   // new array → Zustand detects change
       gold: gold + mission.reward,
       activeMission: Math.min(activeMission + 1, MISSIONS.length - 1),
     })

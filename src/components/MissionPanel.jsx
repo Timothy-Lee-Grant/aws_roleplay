@@ -19,7 +19,7 @@ export default function MissionPanel() {
       <div style={S.scroll}>
         {MISSIONS.map(m => {
           const isActive   = m.id === activeMission
-          const isComplete = completedMissions.has(m.id)
+          const isComplete = completedMissions.includes(m.id)  // array, not Set
           const allSat     = m.reqs.every(r => r.check(checkState))
 
           return (
@@ -68,6 +68,7 @@ export default function MissionPanel() {
       <div style={S.legend}>
         <div style={S.legendTitle}>Map Legend</div>
         {[
+          { bg:'#0c1822', bd:'#1a3040', label:'Internet Edge (IGW, CF, S3)'    },
           { bg:'#1b2e18', bd:'#4a8c3f', label:'Public Subnet (Outer City)'     },
           { bg:'#122518', bd:'#2a7a6a', label:'Private Subnet (Inner Sanctum)'  },
           { bg:'#18261a', bd:'#3a4a38', label:'VPC Wall'                        },

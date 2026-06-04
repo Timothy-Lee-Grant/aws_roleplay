@@ -42,6 +42,9 @@ export default function GameBoard() {
   const placedRef    = useRef(placed)
   const selectedRef  = useRef(selectedServiceId)
   const cameraRef    = useRef({ panX, panY, zoom })
+  // dprRef tracks the current device pixel ratio for HiDPI canvas scaling.
+  // It's a ref (not state) so we don't re-render or restart the RAF loop on change.
+  const dprRef       = useRef(window.devicePixelRatio || 1)
 
   gridRef.current     = grid
   placedRef.current   = placed
@@ -72,12 +75,18 @@ export default function GameBoard() {
     }
   }, [])
 
-  // ── Canvas resize ────────────────────────────────────────────────────────────
+  // ── Canvas resize (HiDPI / Retina fix) ──────────────────────────────────────
+  // The canvas physical buffer must be (clientWidth * dpr) × (clientHeight * dpr).
+  // Without this every drawn pixel occupies a 2×2 block on Retina screens — the
+  // entire game looks blurry. The draw loop then applies setTransform(dpr,…) so
+  // all drawing coordinates remain in CSS pixels (no other code changes needed).
   useEffect(() => {
     const canvas = canvasRef.current
     const resize = () => {
-      canvas.width  = canvas.clientWidth
-      canvas.height = canvas.clientHeight
+      const dpr = window.devicePixelRatio || 1
+      dprRef.current        = dpr
+      canvas.width          = Math.round(canvas.clientWidth  * dpr)
+      canvas.height         = Math.round(canvas.clientHeight * dpr)
     }
     resize()
     const ro = new ResizeObserver(resize)
@@ -91,22 +100,29 @@ export default function GameBoard() {
     if (!canvas) return
 
     const ctx  = canvas.getContext('2d')
-    const W    = canvas.width
-    const H    = canvas.height
+    const dpr  = dprRef.current
+    // cssW/cssH are CSS pixel dimensions — all drawing and positioning uses these.
+    // The dpr base transform below maps them to the correct physical pixel count.
+    const cssW = canvas.width  / dpr   // = canvas.clientWidth
+    const cssH = canvas.height / dpr   // = canvas.clientHeight
     const { panX, panY, zoom } = cameraRef.current
     const grid    = gridRef.current
     const placed  = placedRef.current
     const selId   = selectedRef.current
     const selDef  = SERVICES.find(s => s.id === selId) || null
 
-    // 1. Clear ──────────────────────────────────────────────────────────────────
-    ctx.clearRect(0, 0, W, H)
+    // 1. Reset transform to DPR base and clear ────────────────────────────────
+    // setTransform(dpr,0,0,dpr,0,0) snaps the matrix to a fresh DPR-only scale
+    // each frame — no transform accumulation across frames. After this call,
+    // all coordinates are in CSS pixels; the dpr factor is applied automatically.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, cssW, cssH)
 
     // Subtle background texture
     ctx.fillStyle = '#090b10'
-    ctx.fillRect(0, 0, W, H)
+    ctx.fillRect(0, 0, cssW, cssH)
 
-    // 2. Apply camera transform ────────────────────────────────────────────────
+    // 2. Apply camera transform (on top of dpr base) ──────────────────────────
     ctx.save()
     ctx.translate(panX, panY)
     ctx.scale(zoom, zoom)
@@ -200,8 +216,8 @@ export default function GameBoard() {
       ctx.globalAlpha = alpha
       ctx.font = '13px Cinzel, serif'
       const tw = ctx.measureText(msg).width
-      const tx = (W - tw) / 2
-      const ty = H - 36
+      const tx = (cssW - tw) / 2   // cssW = CSS pixel width (correct after dpr fix)
+      const ty = cssH - 36
 
       ctx.fillStyle = isError2 ? 'rgba(80,20,20,0.88)' : 'rgba(20,18,14,0.88)'
       roundRect(ctx, tx - 18, ty - 18, tw + 36, 28, 8)

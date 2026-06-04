@@ -1,8 +1,12 @@
 import {
   COLS, ROWS, HEX_R, COL_STEP, ROW_STEP,
   BOARD_PAD_X, BOARD_PAD_Y,
-  TERRAIN, TERRAIN_COLOR, TERRAIN_STROKE,
+  TERRAIN,
 } from './constants.js'
+// NOTE: TERRAIN_COLOR and TERRAIN_STROKE (from constants.js) are intentionally NOT
+// imported here. They were only used by the removed drawGrid() / drawConnections()
+// dead-code exports. The live rendering uses TERRAIN_FILL / TERRAIN_STROKE_MAP
+// defined locally in GameBoard.jsx, which is the only file that draws to canvas.
 
 // ─── Coordinate conversions ───────────────────────────────────────────────────
 
@@ -18,25 +22,53 @@ export function hexCenter(row, col) {
 
 /**
  * Convert a world-space pixel coordinate back to the nearest hex (row, col).
- * This is the inverse of hexCenter — used for click detection.
+ *
+ * Uses proper axial cube-coordinate rounding for pointy-top hex grids.
+ * The old approach (Math.round(py / ROW_STEP)) created a ~10px dead zone at
+ * the top and bottom of each tile because hex rows overlap by HEX_R * 0.5 —
+ * the simple round snaps to the wrong row for clicks in that overlap band.
+ *
+ * The cube-rounding algorithm works in 3D (x + y + z = 0 constraint) and
+ * always produces the nearest hex centre, even in the overlap band.
+ *
+ * Derivation:
+ *   Pointy-top axial formula (exact inverse of hexCenter):
+ *     q = (√3/3 · px − 1/3 · py) / HEX_R
+ *     r = (2/3 · py) / HEX_R
+ *   where px = wx − BOARD_PAD_X, py = wy − BOARD_PAD_Y.
+ *
+ *   Then cube-round (q, −q−r, r), reset the largest-delta component to
+ *   maintain x+y+z=0, and convert back to odd-r offset.
  */
 export function pixelToHex(wx, wy) {
-  // Undo the board padding
   const px = wx - BOARD_PAD_X
   const py = wy - BOARD_PAD_Y
 
-  // Estimate row first (each row is ROW_STEP apart)
-  let row = Math.round(py / ROW_STEP)
+  // Pointy-top axial coordinates (exact inverse of hexCenter)
+  const q = (Math.sqrt(3) / 3 * px - 1 / 3 * py) / HEX_R
+  const r = (2 / 3 * py) / HEX_R
 
-  // For odd rows, subtract the column offset before estimating column
-  const isOdd = row % 2 === 1
-  const adjustedX = isOdd ? px - COL_STEP / 2 : px
-  let col = Math.round(adjustedX / COL_STEP)
+  // Cube coordinates (x + y + z = 0 is always satisfied here)
+  let cx = q, cy = -q - r, cz = r
 
-  // Clamp to valid grid range
-  row = Math.max(0, Math.min(ROWS - 1, row))
-  col = Math.max(0, Math.min(COLS - 1, col))
-  return { row, col }
+  // Round each axis independently
+  let rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz)
+
+  // The rounded values may violate x+y+z=0 by ±1.
+  // Fix it by resetting the component with the largest rounding error.
+  const dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz)
+  if      (dx > dy && dx > dz) rx = -ry - rz
+  else if (dy > dz)             ry = -rx - rz
+  else                          rz = -rx - ry
+
+  // Convert axial (rx = q, rz = r) back to odd-r offset
+  const col = rx + (rz - (rz & 1)) / 2
+  const row = rz
+
+  return {
+    row: Math.max(0, Math.min(ROWS - 1, row)),
+    col: Math.max(0, Math.min(COLS - 1, col)),
+  }
 }
 
 // ─── Neighbour calculation ────────────────────────────────────────────────────
@@ -111,71 +143,6 @@ export function drawHexPath(ctx, cx, cy, r = HEX_R) {
   ctx.closePath()
 }
 
-/**
- * Draw the full hex grid — all terrain fills and borders.
- * `selectedId` and `placed` are passed in so we can highlight valid/invalid tiles.
- */
-export function drawGrid(ctx, grid, selectedServiceDef, placed, t) {
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const cell = grid[r][c]
-      const { x, y } = hexCenter(r, c)
-      const terrain = cell.terrain
-
-      // Base fill
-      drawHexPath(ctx, x, y)
-      ctx.fillStyle = TERRAIN_COLOR[terrain] || '#0a0c10'
-      ctx.fill()
-
-      // Selection-mode overlay: pulse valid tiles, dim invalid ones
-      if (selectedServiceDef && !cell.service) {
-        const valid = canPlaceHere(terrain, selectedServiceDef)
-        if (valid) {
-          const pulse = (Math.sin(t * 0.006) + 1) / 2   // 0→1→0
-          drawHexPath(ctx, x, y)
-          ctx.fillStyle = `rgba(100,200,100,${0.08 + pulse * 0.18})`
-          ctx.fill()
-        } else if (terrain !== TERRAIN.OUTSIDE && terrain !== TERRAIN.VOID) {
-          drawHexPath(ctx, x, y)
-          ctx.fillStyle = 'rgba(0,0,0,0.35)'
-          ctx.fill()
-        }
-      }
-
-      // Wall hash pattern
-      if (terrain === TERRAIN.WALL || terrain === TERRAIN.GATE) {
-        ctx.save()
-        drawHexPath(ctx, x, y)
-        ctx.clip()
-        ctx.strokeStyle = 'rgba(80,140,60,0.18)'
-        ctx.lineWidth = 0.8
-        for (let d = -HEX_R * 2; d < HEX_R * 2; d += 6) {
-          ctx.beginPath()
-          ctx.moveTo(x - HEX_R, y + d)
-          ctx.lineTo(x + HEX_R, y + d - HEX_R)
-          ctx.stroke()
-        }
-        ctx.restore()
-      }
-
-      // Stroke border
-      drawHexPath(ctx, x, y)
-      ctx.strokeStyle = TERRAIN_STROKE[terrain] || '#111'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
-
-      // Gate glow ring
-      if (terrain === TERRAIN.GATE) {
-        const glow = (Math.sin(t * 0.004) + 1) / 2
-        drawHexPath(ctx, x, y, HEX_R - 4)
-        ctx.strokeStyle = `rgba(180,220,80,${0.2 + glow * 0.3})`
-        ctx.lineWidth = 1.5
-        ctx.stroke()
-      }
-    }
-  }
-}
-
 // ─── Zone / placement helpers ─────────────────────────────────────────────────
 
 export function canPlaceHere(terrain, svcDef) {
@@ -191,47 +158,3 @@ export function canPlaceHere(terrain, svcDef) {
   return true
 }
 
-/**
- * Draw dotted connection lines between adjacent placed services that can communicate.
- */
-export function drawConnections(ctx, grid, placed, t) {
-  const drawn = new Set()
-
-  for (const p of placed) {
-    const nbrs = getNeighbors(p.row, p.col)
-    for (const { row: nr, col: nc } of nbrs) {
-      const nb = grid[nr]?.[nc]
-      if (!nb?.service) continue
-
-      const key = [p.id + p.row + p.col, nb.service + nr + nc].sort().join('|')
-      if (drawn.has(key)) continue
-      drawn.add(key)
-
-      const linked = p.conns?.includes(nb.service) || false
-
-      const { x: x1, y: y1 } = hexCenter(p.row, p.col)
-      const { x: x2, y: y2 } = hexCenter(nr, nc)
-
-      const dashOffset = -(t * 0.04 % 12)  // animated dash flow
-
-      ctx.save()
-      ctx.setLineDash([5, 4])
-      ctx.lineDashOffset = dashOffset
-      ctx.strokeStyle = linked ? 'rgba(201,168,76,0.55)' : 'rgba(80,76,70,0.3)'
-      ctx.lineWidth   = linked ? 1.5 : 0.6
-      ctx.beginPath()
-      ctx.moveTo(x1, y1)
-      ctx.lineTo(x2, y2)
-      ctx.stroke()
-      ctx.restore()
-
-      if (linked) {
-        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
-        ctx.beginPath()
-        ctx.arc(mx, my, 2.5, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(201,168,76,0.8)'
-        ctx.fill()
-      }
-    }
-  }
-}
