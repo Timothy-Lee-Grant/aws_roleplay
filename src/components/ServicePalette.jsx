@@ -3,6 +3,9 @@ import { useGameStore } from '../store/gameStore.js'
 import { SERVICES }     from '../game/constants.js'
 
 const ZONE_COLOR = {
+  // Edge = outside the VPC. In real AWS: IGW attaches to VPC (not inside it),
+  // CloudFront is a global CDN, S3 is a regional service — none live in a subnet.
+  edge:    { border:'#4a9acc',       badge:'rgba(40,100,180,0.18)',text:'#6ab8e8',       label:'Edge'    },
   public:  { border:'var(--green)',  badge:'rgba(74,140,63,0.2)',  text:'var(--green2)', label:'Public'  },
   private: { border:'var(--teal)',   badge:'rgba(42,122,106,0.2)', text:'var(--teal2)',  label:'Private' },
   wall:    { border:'var(--purple)', badge:'rgba(106,74,156,0.2)', text:'#a080e0',       label:'Gate'    },

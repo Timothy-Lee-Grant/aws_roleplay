@@ -183,8 +183,10 @@ export const useGameStore = create((set, get) => ({
 
 function zoneMessage(svcDef) {
   const map = {
-    public:  `${svcDef.fantasy} belongs in the Public Subnet (green)`,
-    private: `${svcDef.fantasy} belongs in the Inner Sanctum (teal)`,
+    // Edge = internet-edge services that live OUTSIDE the VPC (top row of the board)
+    edge:    `${svcDef.fantasy} must go on an Edge tile — the blue strip outside the VPC wall`,
+    public:  `${svcDef.fantasy} belongs in the Public Subnet (green tiles)`,
+    private: `${svcDef.fantasy} belongs in the Inner Sanctum (teal tiles)`,
     wall:    `${svcDef.fantasy} must go on a Wall or Gate tile`,
     any:     `Place ${svcDef.fantasy} in any subnet tile`,
   }

@@ -114,6 +114,9 @@ export default function GameBoard() {
     // 3. Draw terrain ──────────────────────────────────────────────────────────
     drawTerrain(ctx, grid, selDef, placed, now)
 
+    // 3b. Zone labels — behind services, on top of terrain fill ────────────────
+    drawZoneLabels(ctx)
+
     // 4. Draw connection lines ─────────────────────────────────────────────────
     drawConnections(ctx, grid, placed, now)
 
@@ -126,6 +129,38 @@ export default function GameBoard() {
       ctx.clip()
       drawSprite(ctx, x, y, p.id, now)
       ctx.restore()
+    }
+
+    // 5b. Security Group warning badges (Gap 2 visibility) ────────────────────
+    // Services with requiresSG:true need a Security Group on an adjacent tile.
+    // Without one, they have no stateful firewall — a critical misconfiguration.
+    // Teach this visually: a red "!SG" badge on any unprotected service.
+    // Real AWS: EC2 without SG rules = ALL traffic blocked (implicit deny).
+    {
+      const sgPlacedMap = new Map(placed.map(p => [`${p.row},${p.col}`, p]))
+      for (const p of placed) {
+        const svcDef = SERVICES.find(s => s.id === p.id)
+        if (!svcDef?.requiresSG) continue
+        const nbrs  = getNeighbors(p.row, p.col)
+        const hasSG = nbrs.some(({ row: nr, col: nc }) =>
+          sgPlacedMap.get(`${nr},${nc}`)?.id === 'sg'
+        )
+        if (!hasSG) {
+          const { x, y } = hexCenter(p.row, p.col)
+          ctx.save()
+          // Red badge with !SG text — top-right corner of the tile
+          ctx.fillStyle = 'rgba(210,55,45,0.92)'
+          ctx.beginPath()
+          ctx.arc(x + 15, y - 15, 7.5, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.fillStyle = '#fff'
+          ctx.font = 'bold 6px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText('!SG', x + 15, y - 15)
+          ctx.restore()
+        }
+      }
     }
 
     // 6. Draw hover ring (tracked via mousemove ref) ───────────────────────────
@@ -375,13 +410,62 @@ function drawTerrain(ctx, grid, selDef, placed, t) {
         ctx.lineWidth = 1.5
         ctx.stroke()
       }
+
+      // Edge zone: subtle blue inner ring — visually marks this as "internet-edge"
+      // not just void space. The blue tint signals "AWS infrastructure, but not YOUR VPC."
+      if (terrain === TERRAIN.EDGE) {
+        const edgePulse = (Math.sin(t * 0.0025 + 1.2) + 1) / 2  // slow, offset pulse
+        drawHexPath(ctx, x, y, HEX_R - 6)
+        ctx.strokeStyle = `rgba(50,120,210,${0.10 + edgePulse * 0.12})`
+        ctx.lineWidth = 1.2
+        ctx.stroke()
+      }
     }
   }
+}
+
+/**
+ * Draw zone labels (INTERNET EDGE, PUBLIC SUBNET, PRIVATE SUBNET) as subtle
+ * background text. They appear on empty tiles and are occluded by sprites.
+ * Low opacity — they guide new players without cluttering the board.
+ */
+function drawZoneLabels(ctx) {
+  ctx.save()
+  ctx.textAlign    = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font         = 'bold 7px "Courier New", monospace'
+  ctx.letterSpacing = '0.5px'
+
+  // INTERNET EDGE — centered over the edge strip (row 0, col 5)
+  const edge = hexCenter(0, 5)
+  ctx.globalAlpha = 0.22
+  ctx.fillStyle   = '#5aaadc'
+  ctx.fillText('INTERNET EDGE', edge.x, edge.y)
+
+  // PUBLIC SUBNET — top of the public zone, left and right flanks
+  ctx.globalAlpha = 0.16
+  ctx.fillStyle   = '#70b860'
+  const pubL = hexCenter(2, 2)
+  ctx.fillText('PUBLIC', pubL.x, pubL.y)
+  const pubR = hexCenter(2, 8)
+  ctx.fillText('PUBLIC', pubR.x, pubR.y)
+
+  // PRIVATE SUBNET — center of the private zone
+  const prv = hexCenter(4, 5)
+  ctx.globalAlpha = 0.20
+  ctx.fillStyle   = '#4ab898'
+  ctx.fillText('PRIVATE SUBNET', prv.x, prv.y)
+
+  ctx.restore()
 }
 
 const TERRAIN_FILL = {
   void:    '#060810',
   outside: '#0e1018',
+  // Edge zone: blue tint — "AWS-managed internet edge, outside your VPC"
+  // In real AWS: IGW attaches to VPC. CloudFront + S3 are regional/global.
+  // None of these live inside a subnet — this strip teaches that distinction.
+  edge:    '#0c1822',
   wall:    '#17251a',
   gate:    '#1c2c18',
   public:  '#1a2d18',
@@ -390,18 +474,45 @@ const TERRAIN_FILL = {
 const TERRAIN_STROKE_MAP = {
   void:    '#090b12',
   outside: '#121520',
+  edge:    '#1a3040',   // blue border distinguishes edge from the void outside
   wall:    '#283a26',
   gate:    '#607840',
   public:  '#2c4e28',
   private: '#1c4836',
 }
 
+/**
+ * drawConnections — draws animated, directional connection lines.
+ *
+ * Two passes:
+ *
+ *  Pass 1 — Adjacent within-VPC connections (local topology).
+ *    Only neighbouring tiles get lines. This teaches that in-VPC routing
+ *    depends on subnet placement. EC2 can only talk to RDS if they're nearby.
+ *
+ *  Pass 2 — Cross-zone connections (edge ↔ VPC).
+ *    Edge services (IGW, CloudFront, S3) are REGIONAL/GLOBAL — they sit
+ *    outside the VPC and can reach any VPC service regardless of position.
+ *    These long lines crossing the board teach: "S3 is not in your subnet."
+ *    Real AWS equivalent: traffic routes through AWS-managed infrastructure,
+ *    not through your VPC routing tables.
+ *
+ * Directional arrows (Gap 9 fix):
+ *    Each service's `conns` lists services it SENDS TRAFFIC TO.
+ *    Arrowheads appear at the receiving end.
+ *    EC2 → RDS: one arrow (EC2 initiates DB queries).
+ *    EC2 ↔ ALB: two arrows (request in, response out).
+ */
 function drawConnections(ctx, grid, placed, t) {
-  const drawn = new Set()
+  const drawn     = new Set()
+  const placedMap = new Map(placed.map(p => [`${p.row},${p.col}`, p]))
+  const dashOff   = -(t * 0.04 % 12)
 
+  // ─── Pass 1: Adjacent within-VPC connections ────────────────────────────────
   for (const p of placed) {
-    const nbrs = getNeighbors(p.row, p.col)
-    for (const { row: nr, col: nc } of nbrs) {
+    if (p.zone === 'edge') continue  // edge services handled in Pass 2
+
+    for (const { row: nr, col: nc } of getNeighbors(p.row, p.col)) {
       const nb = grid[nr]?.[nc]
       if (!nb?.service) continue
 
@@ -409,32 +520,87 @@ function drawConnections(ctx, grid, placed, t) {
       if (drawn.has(key)) continue
       drawn.add(key)
 
-      const linked = p.conns?.includes(nb.service) || false
+      const nbP   = placedMap.get(`${nr},${nc}`)
+      const pToNb = p.conns?.includes(nb.service)   || false  // p → nb
+      const nbToP = nbP?.conns?.includes(p.id)      || false  // nb → p
+      const linked = pToNb || nbToP
+
       const { x: x1, y: y1 } = hexCenter(p.row, p.col)
       const { x: x2, y: y2 } = hexCenter(nr, nc)
 
       ctx.save()
       ctx.setLineDash([5, 4])
-      ctx.lineDashOffset = -(t * 0.04 % 12)
+      ctx.lineDashOffset = dashOff
       ctx.strokeStyle = linked ? 'rgba(201,168,76,0.52)' : 'rgba(70,66,60,0.28)'
       ctx.lineWidth   = linked ? 1.5 : 0.6
-      ctx.beginPath()
-      ctx.moveTo(x1, y1)
-      ctx.lineTo(x2, y2)
-      ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
       ctx.setLineDash([])
       ctx.restore()
 
       if (linked) {
-        const mx = (x1 + x2) / 2
-        const my = (y1 + y2) / 2
-        ctx.beginPath()
-        ctx.arc(mx, my, 2.5, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(201,168,76,0.8)'
-        ctx.fill()
+        ctx.fillStyle = 'rgba(201,168,76,0.80)'
+        if (pToNb) drawArrowhead(ctx, x1, y1, x2, y2)   // arrow at nb end
+        if (nbToP) drawArrowhead(ctx, x2, y2, x1, y1)   // arrow at p end
+        // Midpoint dot on unidirectional lines makes the single direction obvious
+        if (!pToNb || !nbToP) {
+          ctx.beginPath()
+          ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, 2, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
     }
   }
+
+  // ─── Pass 2: Cross-zone connections (edge ↔ any VPC service) ───────────────
+  const edgePlaced = placed.filter(p => p.zone === 'edge')
+  const vpcPlaced  = placed.filter(p => p.zone !== 'edge')
+
+  for (const ep of edgePlaced) {
+    for (const vp of vpcPlaced) {
+      const epToVp = ep.conns?.includes(vp.id) || false
+      const vpToEp = vp.conns?.includes(ep.id) || false
+      if (!epToVp && !vpToEp) continue
+
+      const key = [[ep.id, ep.row, ep.col].join(','), [vp.id, vp.row, vp.col].join(',')].sort().join('|')
+      if (drawn.has(key)) continue
+      drawn.add(key)
+
+      const { x: x1, y: y1 } = hexCenter(ep.row, ep.col)
+      const { x: x2, y: y2 } = hexCenter(vp.row, vp.col)
+
+      // Slightly fainter / slower dash → cross-zone line reads differently from local
+      ctx.save()
+      ctx.setLineDash([4, 4])
+      ctx.lineDashOffset = -(t * 0.028 % 10)
+      ctx.strokeStyle = 'rgba(201,168,76,0.36)'
+      ctx.lineWidth   = 1.3
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
+      ctx.setLineDash([])
+
+      ctx.fillStyle = 'rgba(201,168,76,0.65)'
+      if (epToVp) drawArrowhead(ctx, x1, y1, x2, y2)
+      if (vpToEp) drawArrowhead(ctx, x2, y2, x1, y1)
+      ctx.restore()
+    }
+  }
+}
+
+/**
+ * Draw a filled arrowhead pointing FROM (x1,y1) TOWARD (x2,y2).
+ * Placed at 65% along the line — clearly near the destination without
+ * overlapping the sprite at the centre of the tile.
+ */
+function drawArrowhead(ctx, x1, y1, x2, y2) {
+  const angle = Math.atan2(y2 - y1, x2 - x1)
+  const ax    = x1 + (x2 - x1) * 0.65
+  const ay    = y1 + (y2 - y1) * 0.65
+  const size  = 5
+  ctx.beginPath()
+  ctx.moveTo(ax + Math.cos(angle)       * size,  ay + Math.sin(angle)       * size)
+  ctx.lineTo(ax + Math.cos(angle - 2.4) * size,  ay + Math.sin(angle - 2.4) * size)
+  ctx.lineTo(ax + Math.cos(angle + 2.4) * size,  ay + Math.sin(angle + 2.4) * size)
+  ctx.closePath()
+  ctx.fill()
 }
 
 function roundRect(ctx, x, y, w, h, r) {

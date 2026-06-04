@@ -84,6 +84,13 @@ export function buildGrid() {
   g[1][5].terrain = TERRAIN.GATE
   g[7][5].terrain = TERRAIN.GATE
 
+  // Edge zone: the row outside the VPC wall (row 0, cols 2–8).
+  // This is where internet-edge AWS services live: IGW, CloudFront, S3.
+  // They are NOT inside the VPC — they sit at the boundary of AWS infrastructure.
+  // In real AWS: IGW attaches to the VPC (not inside it). CloudFront and S3 are
+  // regional/global services that exist entirely outside any VPC subnet.
+  for (let c = 2; c <= 8; c++) g[0][c].terrain = TERRAIN.EDGE
+
   return g
 }
 
@@ -173,9 +180,13 @@ export function drawGrid(ctx, grid, selectedServiceDef, placed, t) {
 
 export function canPlaceHere(terrain, svcDef) {
   if (!svcDef) return false
+  // Edge-zone services (IGW, CloudFront, S3) live OUTSIDE the VPC —
+  // they must go on edge tiles (row 0 strip), not inside any subnet.
+  if (svcDef.zone === 'edge'    && terrain !== TERRAIN.EDGE)    return false
   if (svcDef.zone === 'public'  && terrain !== TERRAIN.PUBLIC)  return false
   if (svcDef.zone === 'private' && terrain !== TERRAIN.PRIVATE) return false
   if (svcDef.zone === 'wall'    && terrain !== TERRAIN.GATE && terrain !== TERRAIN.WALL) return false
+  // 'any' = Lambda, IAM, SG, RT — they can go in either subnet
   if (svcDef.zone === 'any'     && terrain !== TERRAIN.PUBLIC && terrain !== TERRAIN.PRIVATE) return false
   return true
 }
