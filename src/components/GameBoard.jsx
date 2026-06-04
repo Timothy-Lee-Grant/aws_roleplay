@@ -3,6 +3,7 @@ import { useGameStore }        from '../store/gameStore.js'
 import { SERVICES, COLS, ROWS, HEX_R, TERRAIN } from '../game/constants.js'
 import { hexCenter, pixelToHex, getNeighbors, drawHexPath, canPlaceHere } from '../game/hexGrid.js'
 import { drawSprite } from '../game/sprites.js'
+import { startAmbient, stopAmbient, playHover } from '../game/audio.js'
 
 /**
  * GameBoard — the canvas component.
@@ -53,6 +54,23 @@ export default function GameBoard() {
   function showToast(msg, isError = false) {
     toastRef.current = { msg, until: performance.now() + 2200, isError }
   }
+
+  // ── Ambient audio — starts on first user interaction, stops on unmount ───────
+  // We attach a one-time 'pointerdown' listener to the canvas. The first click
+  // both satisfies the browser's user-gesture requirement for AudioContext AND
+  // starts the drone. After that we remove the listener so it only fires once.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const onFirstInteraction = () => {
+      startAmbient()
+      canvas.removeEventListener('pointerdown', onFirstInteraction)
+    }
+    canvas.addEventListener('pointerdown', onFirstInteraction)
+    return () => {
+      canvas.removeEventListener('pointerdown', onFirstInteraction)
+      stopAmbient()
+    }
+  }, [])
 
   // ── Canvas resize ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -175,8 +193,10 @@ export default function GameBoard() {
   }, [draw])
 
   // ── Pan / Zoom ───────────────────────────────────────────────────────────────
-  const dragRef = useRef(null)
+  const dragRef  = useRef(null)
   const hoverRef = useRef(null)
+  // Track previous hover position so we only fire playHover when the hex changes
+  const lastHoverKey = useRef(null)
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -224,7 +244,16 @@ export default function GameBoard() {
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
     const { wx, wy } = canvasToWorld(cx, cy)
-    hoverRef.current = pixelToHex(wx, wy)
+    const hex = pixelToHex(wx, wy)
+    hoverRef.current = hex
+
+    // Only play hover tick when the cursor moves to a different tile
+    const key = `${hex.row},${hex.col}`
+    if (key !== lastHoverKey.current) {
+      lastHoverKey.current = key
+      // Only tick when a service is selected (user is actively placing)
+      if (selectedRef.current) playHover()
+    }
 
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX

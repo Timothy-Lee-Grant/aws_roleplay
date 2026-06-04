@@ -1,6 +1,16 @@
 import { create } from 'zustand'
 import { SERVICES, MISSIONS } from '../game/constants.js'
 import { buildGrid, getNeighbors, canPlaceHere } from '../game/hexGrid.js'
+import {
+  playPlacement,
+  playRemoval,
+  playConnection,
+  playMissionComplete,
+  playError,
+  playSelect,
+  playCancelSelection,
+  playGoldGain,
+} from '../game/audio.js'
 
 /**
  * The Zustand store holds ALL game state and every action that mutates it.
@@ -31,10 +41,18 @@ export const useGameStore = create((set, get) => ({
 
   selectService(id) {
     const current = get().selectedServiceId
-    set({ selectedServiceId: current === id ? null : id })
+    // Toggling off is a cancel; toggling on (or switching) is a select
+    if (current === id) {
+      playCancelSelection()
+      set({ selectedServiceId: null })
+    } else {
+      playSelect()
+      set({ selectedServiceId: id })
+    }
   },
 
   clearSelection() {
+    if (get().selectedServiceId) playCancelSelection()
     set({ selectedServiceId: null })
   },
 
@@ -49,37 +67,58 @@ export const useGameStore = create((set, get) => ({
     const svcDef  = SERVICES.find(s => s.id === selectedServiceId)
     const cell    = grid[row][col]
 
-    // Validation
-    if (cell.service)
+    // Validation — play error sound and return early on any failure
+    if (cell.service) {
+      playError()
       return { ok: false, message: 'Tile already occupied' }
-
-    if (!canPlaceHere(cell.terrain, svcDef))
+    }
+    if (!canPlaceHere(cell.terrain, svcDef)) {
+      playError()
       return { ok: false, message: zoneMessage(svcDef) }
-
+    }
     const alreadyPlaced = placed.filter(p => p.id === selectedServiceId).length
-    if (alreadyPlaced >= svcDef.max)
+    if (alreadyPlaced >= svcDef.max) {
+      playError()
       return { ok: false, message: `All ${svcDef.fantasy}s already deployed` }
-
-    if (gold < svcDef.cost)
+    }
+    if (gold < svcDef.cost) {
+      playError()
       return { ok: false, message: 'Not enough gold 🪙' }
+    }
 
     // Apply
     const newGrid = grid.map(r => r.map(c => ({ ...c })))
     newGrid[row][col].service = selectedServiceId
 
-    const newPlaced = [...placed, {
-      id:   selectedServiceId,
-      row, col,
-      zone: cell.terrain,
-      conns: svcDef.conns,
-    }]
+    const newEntry = { id: selectedServiceId, row, col, zone: cell.terrain, conns: svcDef.conns }
+    const newPlaced = [...placed, newEntry]
 
     set({
       grid:    newGrid,
       placed:  newPlaced,
       gold:    gold - svcDef.cost,
-      selectedServiceId: null,   // clear selection after placing
+      selectedServiceId: null,
     })
+
+    // ── Audio ──
+    // 1. Unique placement sound for this service
+    playPlacement(selectedServiceId)
+
+    // 2. For every adjacent service that now has a valid connection, play
+    //    a brief connection chime (staggered so they don't all fire at once)
+    const nbrs = getNeighbors(row, col)
+    let connectionCount = 0
+    for (const { row: nr, col: nc } of nbrs) {
+      const nbCell = newGrid[nr]?.[nc]
+      if (!nbCell?.service) continue
+      const linked = svcDef.conns.includes(nbCell.service) ||
+        SERVICES.find(s => s.id === nbCell.service)?.conns?.includes(selectedServiceId)
+      if (linked) {
+        // Small delay per connection so chimes cascade rather than stack
+        setTimeout(() => playConnection(), 180 + connectionCount * 120)
+        connectionCount++
+      }
+    }
 
     return { ok: true, message: `${svcDef.fantasy} deployed!` }
   },
@@ -104,6 +143,9 @@ export const useGameStore = create((set, get) => ({
       gold:   gold + refund,
     })
 
+    playRemoval()
+    if (refund > 0) setTimeout(() => playGoldGain(), 220)
+
     return { ok: true, message: `${svcDef.fantasy} recalled. +${refund}🪙 refund` }
   },
 
@@ -120,6 +162,10 @@ export const useGameStore = create((set, get) => ({
       gold: gold + mission.reward,
       activeMission: Math.min(activeMission + 1, MISSIONS.length - 1),
     })
+
+    playMissionComplete()
+    // Gold reward jingle slightly after the fanfare starts
+    setTimeout(() => playGoldGain(), 520)
   },
 
   // ── Camera controls ─────────────────────────────────────────────────────────

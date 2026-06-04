@@ -1,13 +1,22 @@
-import React from 'react'
-import { useGameStore } from '../store/gameStore.js'
-import { MISSIONS }     from '../game/constants.js'
+import React, { useState, useCallback } from 'react'
+import { useGameStore }       from '../store/gameStore.js'
+import { MISSIONS }           from '../game/constants.js'
+import { toggleMute, isMuted } from '../game/audio.js'
 
 export default function HUD() {
-  const gold             = useGameStore(s => s.gold)
-  const placed           = useGameStore(s => s.placed)
-  const completedMissions= useGameStore(s => s.completedMissions)
-  const activeMission    = useGameStore(s => s.activeMission)
-  const currentMission   = MISSIONS[activeMission]
+  const gold              = useGameStore(s => s.gold)
+  const placed            = useGameStore(s => s.placed)
+  const completedMissions = useGameStore(s => s.completedMissions)
+  const activeMission     = useGameStore(s => s.activeMission)
+  const currentMission    = MISSIONS[activeMission]
+
+  // Local state tracks mute icon — mirrors the audio module's mute flag
+  const [muted, setMuted] = useState(false)
+
+  const handleMute = useCallback(() => {
+    const nowMuted = toggleMute()
+    setMuted(nowMuted)
+  }, [])
 
   return (
     <div style={S.bar}>
@@ -24,7 +33,16 @@ export default function HUD() {
         <Pill icon="🪙" label="Gold"      value={gold} />
       </div>
 
-      <div style={S.hint}>scroll to zoom · drag to pan</div>
+      <div style={S.hint}>scroll to zoom · alt+drag to pan</div>
+
+      <button
+        style={{ ...S.muteBtn, ...(muted ? S.muteBtnMuted : {}) }}
+        onClick={handleMute}
+        title={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? 'Unmute audio' : 'Mute audio'}
+      >
+        {muted ? '🔇' : '🔊'}
+      </button>
     </div>
   )
 }
@@ -73,5 +91,16 @@ const S = {
     fontSize: 10, color: 'var(--text3)',
     fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
     whiteSpace: 'nowrap',
+  },
+  muteBtn: {
+    background: 'var(--bg3)', border: '1px solid var(--border)',
+    borderRadius: 8, padding: '5px 10px',
+    fontSize: 16, cursor: 'pointer',
+    lineHeight: 1, transition: 'border-color 0.15s, opacity 0.15s',
+    flexShrink: 0,
+  },
+  muteBtnMuted: {
+    opacity: 0.45,
+    borderColor: 'var(--border2)',
   },
 }
