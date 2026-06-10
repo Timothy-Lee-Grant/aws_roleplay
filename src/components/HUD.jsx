@@ -9,8 +9,9 @@ export default function HUD() {
   const completedMissions = useGameStore(s => s.completedMissions)
   const activeMission     = useGameStore(s => s.activeMission)
   const phase             = useGameStore(s => s.phase)
+  const waveTimer         = useGameStore(s => s.waveTimer)
+  const waveStats         = useGameStore(s => s.waveStats)
   const startWave         = useGameStore(s => s.startWave)
-  const endWave           = useGameStore(s => s.endWave)
   const currentMission    = MISSIONS[activeMission]
 
   // Local state tracks mute icon — mirrors the audio module's mute flag
@@ -21,28 +22,11 @@ export default function HUD() {
     setMuted(nowMuted)
   }, [])
 
-  // "Unleash the Traffic" — triggers wave phase.
-  // Until the real simulation engine (Phase 2) is built, we run a stub:
-  // wait 3 seconds, then auto-resolve with a placeholder result.
+  // "Unleash the Traffic" — starts the wave phase.
+  // GameBoard's RAF loop drives the real simulation and calls endWave() when the timer runs out.
   const handleUnleash = useCallback(() => {
     startWave()
-    setTimeout(() => {
-      endWave({
-        packetsOk:      Math.max(0, placed.length * 3 - 4),
-        packetsFailed:  4,
-        threats:        placed.length >= 3 ? 1 : 3,
-        score:          Math.min(100, placed.length * 12),
-        wellArchitected: {
-          security:             Math.min(40, placed.length * 5),
-          reliability:          Math.min(20, placed.length * 3),
-          performance:          Math.min(20, placed.length * 3),
-          costOptimization:     Math.min(10, placed.length * 2),
-          operationalExcellence: Math.min(10, placed.length * 1),
-        },
-        note: 'Simulation engine coming in Phase 2 — this is a placeholder result.',
-      })
-    }, 3000)
-  }, [startWave, endWave, placed.length])
+  }, [startWave])
 
   return (
     <div style={S.bar}>
@@ -70,6 +54,21 @@ export default function HUD() {
         >
           ⚡ Unleash the Traffic
         </button>
+      )}
+
+      {/* Wave-phase HUD: countdown + live packet stats */}
+      {phase === 'wave' && (
+        <div style={S.waveBar}>
+          <span style={{ ...S.timerNum, color: waveTimer <= 10 ? '#ff6060' : '#60e090' }}>
+            ⏱ {waveTimer}s
+          </span>
+          <div style={S.divider} />
+          <span style={S.waveStatOk}>✓ {waveStats.packetsOk}</span>
+          <span style={S.waveStatFail}>✗ {waveStats.packetsFailed}</span>
+          {waveStats.threatsStruck > 0 && (
+            <span style={S.waveStatThreat}>💀 {waveStats.threatsStruck}</span>
+          )}
+        </div>
       )}
 
       <div style={S.hint}>scroll to zoom · alt+drag to pan</div>
@@ -145,6 +144,19 @@ const S = {
     fontFamily: "'Crimson Text', serif", fontStyle: 'italic',
     whiteSpace: 'nowrap',
   },
+  waveBar: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: 'var(--bg3)', border: '1px solid var(--border)',
+    borderRadius: 20, padding: '4px 14px',
+    fontSize: 12, flexShrink: 0,
+  },
+  timerNum: {
+    fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: 13,
+    letterSpacing: '0.05em', transition: 'color 0.3s',
+  },
+  waveStatOk:    { color: '#60e090', fontFamily: 'Cinzel, serif', fontSize: 12 },
+  waveStatFail:  { color: '#e06060', fontFamily: 'Cinzel, serif', fontSize: 12 },
+  waveStatThreat:{ color: '#e08060', fontFamily: 'Cinzel, serif', fontSize: 12 },
   muteBtn: {
     background: 'var(--bg3)', border: '1px solid var(--border)',
     borderRadius: 8, padding: '5px 10px',

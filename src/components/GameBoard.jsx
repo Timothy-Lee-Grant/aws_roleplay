@@ -4,6 +4,7 @@ import { SERVICES, COLS, ROWS, HEX_R, TERRAIN } from '../game/constants.js'
 import { hexCenter, pixelToHex, getNeighbors, drawHexPath, canPlaceHere } from '../game/hexGrid.js'
 import { drawSprite } from '../game/sprites.js'
 import { startAmbient, stopAmbient, playHover } from '../game/audio.js'
+import { buildInitialWaveState, simulationTick, computeWaveResult } from '../game/simulation.js'
 
 /**
  * GameBoard — the canvas component.
@@ -27,20 +28,25 @@ export default function GameBoard() {
   const grid              = useGameStore(s => s.grid)
   const placed            = useGameStore(s => s.placed)
   const selectedServiceId = useGameStore(s => s.selectedServiceId)
+  const phase             = useGameStore(s => s.phase)
   const panX              = useGameStore(s => s.panX)
   const panY              = useGameStore(s => s.panY)
   const zoom              = useGameStore(s => s.zoom)
 
   // ── Store actions ────────────────────────────────────────────────────────────
-  const placeService   = useGameStore(s => s.placeService)
-  const removeService  = useGameStore(s => s.removeService)
-  const clearSelection = useGameStore(s => s.clearSelection)
-  const setCamera      = useGameStore(s => s.setCamera)
+  const placeService       = useGameStore(s => s.placeService)
+  const removeService      = useGameStore(s => s.removeService)
+  const clearSelection     = useGameStore(s => s.clearSelection)
+  const setCamera          = useGameStore(s => s.setCamera)
+  const endWave            = useGameStore(s => s.endWave)
+  const dispatchSimEvents  = useGameStore(s => s.dispatchSimEvents)
+  const updateWaveTimer    = useGameStore(s => s.updateWaveTimer)
 
   // ── Refs for the RAF loop (never stale, never restart the loop) ──────────────
   const gridRef      = useRef(grid)
   const placedRef    = useRef(placed)
   const selectedRef  = useRef(selectedServiceId)
+  const phaseRef     = useRef(phase)
   const cameraRef    = useRef({ panX, panY, zoom })
   // dprRef tracks the current device pixel ratio for HiDPI canvas scaling.
   // It's a ref (not state) so we don't re-render or restart the RAF loop on change.
@@ -49,7 +55,25 @@ export default function GameBoard() {
   gridRef.current     = grid
   placedRef.current   = placed
   selectedRef.current = selectedServiceId
+  phaseRef.current    = phase
   cameraRef.current   = { panX, panY, zoom }
+
+  // Action refs — stable Zustand references; stored in refs so the RAF loop
+  // can call them without the draw callback having stale closures.
+  const endWaveRef           = useRef(endWave)
+  const dispatchSimEventsRef = useRef(dispatchSimEvents)
+  const updateWaveTimerRef   = useRef(updateWaveTimer)
+  endWaveRef.current           = endWave
+  dispatchSimEventsRef.current = dispatchSimEvents
+  updateWaveTimerRef.current   = updateWaveTimer
+
+  // ── Simulation state (lives in refs — not Zustand — for 60fps access) ────────
+  const waveStateRef     = useRef(null)   // current SimWaveState object
+  const waveTimerRef     = useRef(60)     // seconds remaining (counts down in RAF)
+  const waveEndedRef     = useRef(false)  // prevents double-calling endWave
+  const lastTickTimeRef  = useRef(null)   // previous RAF `now` value for delta
+  const activationsRef   = useRef([])     // { pos, startTime } rings animation
+  const lastDispatchRef  = useRef(0)      // throttle store dispatch (performance.now)
 
   // ── Toast (simple in-canvas notification, no DOM element needed) ─────────────
   const toastRef = useRef({ msg: '', until: 0 })
@@ -74,6 +98,25 @@ export default function GameBoard() {
       stopAmbient()
     }
   }, [])
+
+  // ── Wave initialisation ─────────────────────────────────────────────────────
+  // When phase changes to 'wave', snapshot the current board and build initial
+  // simulation state. The RAF loop picks this up on the very next frame.
+  // Note: `placed` is intentionally captured here (not placedRef) so we get a
+  // clean snapshot of the board at the moment the wave starts.
+  useEffect(() => {
+    if (phase === 'wave') {
+      waveStateRef.current    = buildInitialWaveState(placed, getNeighbors)
+      waveTimerRef.current    = 60
+      waveEndedRef.current    = false
+      lastTickTimeRef.current = null
+      activationsRef.current  = []
+      lastDispatchRef.current = 0
+    } else {
+      waveStateRef.current = null
+      waveEndedRef.current = false
+    }
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Canvas resize (HiDPI / Retina fix) ──────────────────────────────────────
   // The canvas physical buffer must be (clientWidth * dpr) × (clientHeight * dpr).
@@ -202,6 +245,130 @@ export default function GameBoard() {
         ctx.restore()
       }
     }
+
+    // ── Wave simulation: tick + render ──────────────────────────────────────────
+    // All of this is inside the camera transform so world-space coordinates work.
+    if (phaseRef.current === 'wave' && waveStateRef.current) {
+      // Delta time ────────────────────────────────────────────────────────────────
+      const prevTickTime = lastTickTimeRef.current
+      const deltaMs = prevTickTime ? Math.min(now - prevTickTime, 50) : 0
+      lastTickTimeRef.current = now
+
+      if (deltaMs > 0 && !waveEndedRef.current) {
+        // ── Advance simulation ───────────────────────────────────────────────────
+        const { waveState: nextState, events } = simulationTick(waveStateRef.current, deltaMs)
+        waveStateRef.current = nextState
+
+        // Queue activation rings (visual only — not dispatched to store)
+        for (const e of events) {
+          if (e.type === 'SERVICE_ACTIVATED') {
+            activationsRef.current.push({ pos: e.pos, startTime: now })
+          }
+        }
+
+        // Dispatch meaningful events to store (stats + battle log) — throttled
+        const hasMeaningful = events.some(e =>
+          e.type === 'PACKET_COMPLETE' || e.type === 'PACKET_FAILED' || e.type === 'THREAT_STRUCK'
+        )
+        if (hasMeaningful || now - lastDispatchRef.current > 400) {
+          if (events.length > 0) {
+            dispatchSimEventsRef.current(events)
+            lastDispatchRef.current = now
+          }
+        }
+
+        // ── Wave timer countdown ─────────────────────────────────────────────────
+        const prevTimer = waveTimerRef.current
+        waveTimerRef.current -= deltaMs / 1000
+        // Sync display to store once per second
+        if (Math.ceil(waveTimerRef.current) < Math.ceil(prevTimer)) {
+          updateWaveTimerRef.current(waveTimerRef.current)
+        }
+        // End wave when timer reaches 0
+        if (waveTimerRef.current <= 0 && !waveEndedRef.current) {
+          waveEndedRef.current = true
+          const result = computeWaveResult(waveStateRef.current, placedRef.current, getNeighbors)
+          endWaveRef.current(result)
+        }
+      }
+
+      // Prune old activation rings
+      activationsRef.current = activationsRef.current.filter(a => now - a.startTime < 600)
+
+      // ── Draw activation rings ────────────────────────────────────────────────
+      for (const act of activationsRef.current) {
+        const t2 = (now - act.startTime) / 600
+        const radius = 8 + t2 * 22
+        const alpha  = (1 - t2) * 0.65
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(act.pos.x, act.pos.y, radius, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(160,220,80,${alpha})`
+        ctx.lineWidth = 2 / zoom
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      // ── Draw data packets ────────────────────────────────────────────────────
+      const ws = waveStateRef.current
+      if (ws) {
+        for (const pkt of ws.packets) {
+          const px = pkt.fromPos.x + (pkt.toPos.x - pkt.fromPos.x) * pkt.progress
+          const py = pkt.fromPos.y + (pkt.toPos.y - pkt.fromPos.y) * pkt.progress
+
+          ctx.save()
+          ctx.globalAlpha = pkt.dying ? 0.4 : 1
+
+          // Glow halo
+          const grd = ctx.createRadialGradient(px, py, 0, px, py, 8)
+          grd.addColorStop(0, pkt.color + 'cc')
+          grd.addColorStop(1, pkt.color + '00')
+          ctx.beginPath()
+          ctx.arc(px, py, 8, 0, Math.PI * 2)
+          ctx.fillStyle = grd
+          ctx.fill()
+
+          // Core dot
+          ctx.beginPath()
+          ctx.arc(px, py, 3.5, 0, Math.PI * 2)
+          ctx.fillStyle = pkt.dying ? '#ff6060' : '#ffffff'
+          ctx.fill()
+
+          ctx.restore()
+        }
+
+        // ── Draw threats ───────────────────────────────────────────────────────
+        for (const threat of ws.threats) {
+          if (threat.deflected) continue
+          const tp = {
+            x: threat.startPos.x + (threat.targetPos.x - threat.startPos.x) * threat.progress,
+            y: threat.startPos.y + (threat.targetPos.y - threat.startPos.y) * threat.progress,
+          }
+
+          ctx.save()
+          ctx.globalAlpha = threat.struck ? 0.22 : 1
+
+          // Glow aura
+          const grd = ctx.createRadialGradient(tp.x, tp.y, 0, tp.x, tp.y, 20)
+          grd.addColorStop(0, threat.color + '55')
+          grd.addColorStop(1, 'transparent')
+          ctx.beginPath()
+          ctx.arc(tp.x, tp.y, 20, 0, Math.PI * 2)
+          ctx.fillStyle = grd
+          ctx.fill()
+
+          // Emoji icon — scale inversely with zoom so threats stay readable
+          const iconSize = Math.max(14, 18 / zoom)
+          ctx.font = `${iconSize}px serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(threat.icon, tp.x, tp.y)
+
+          ctx.restore()
+        }
+      }
+    }
+    // ── End wave simulation ──────────────────────────────────────────────────────
 
     ctx.restore()  // end camera transform
 

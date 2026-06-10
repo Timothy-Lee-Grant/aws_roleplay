@@ -48,6 +48,11 @@ export const useGameStore = create((set, get) => ({
   // Populated by endWave(); read by DebriefScreen.
   waveResult: null, // { packetsOk, packetsFailed, threats, score, wellArchitected }
 
+  // Live wave state — updated by GameBoard's RAF loop via dispatchSimEvents / updateWaveTimer.
+  waveStats: { packetsOk: 0, packetsFailed: 0, threatsDeflected: 0, threatsStruck: 0 },
+  battleLog: [],    // [{ type: 'fail'|'threat'|'info', text, t }], max 20, newest first
+  waveTimer: 60,    // seconds remaining (integer, synced from RAF every second)
+
 
   // ── Camera (pan + zoom for the canvas) ─────────────────────────────────────
   panX:   40,
@@ -99,7 +104,13 @@ export const useGameStore = create((set, get) => ({
 
   /** build → wave */
   startWave() {
-    set({ phase: 'wave', selectedServiceId: null })
+    set({
+      phase:             'wave',
+      selectedServiceId: null,
+      waveStats:         { packetsOk: 0, packetsFailed: 0, threatsDeflected: 0, threatsStruck: 0 },
+      battleLog:         [],
+      waveTimer:         60,
+    })
   },
 
   /**
@@ -109,6 +120,40 @@ export const useGameStore = create((set, get) => ({
    */
   endWave(result) {
     set({ phase: 'debrief', waveResult: result })
+  },
+
+  /**
+   * Called from GameBoard's RAF loop each tick to sync stats + battle log.
+   * Only fires when there are meaningful events (packet fail, threat struck).
+   */
+  dispatchSimEvents(events) {
+    if (!events || events.length === 0) return
+    const { waveStats, battleLog } = get()
+    let { packetsOk, packetsFailed, threatsDeflected, threatsStruck } = waveStats
+    const newEntries = []
+    for (const e of events) {
+      if (e.type === 'PACKET_COMPLETE')  { packetsOk++ }
+      if (e.type === 'PACKET_FAILED')    {
+        packetsFailed++
+        newEntries.push({ type: 'fail',   text: e.reason ?? 'Architecture gap — packet dropped', t: Date.now() })
+      }
+      if (e.type === 'THREAT_STRUCK')    {
+        threatsStruck++
+        newEntries.push({ type: 'threat', text: `${e.name} struck! ${e.fix}`,                    t: Date.now() })
+      }
+    }
+    // Only write to store when something actually changed
+    const statsChanged = packetsOk !== waveStats.packetsOk || packetsFailed !== waveStats.packetsFailed || threatsStruck !== waveStats.threatsStruck
+    if (!statsChanged && newEntries.length === 0) return
+    set({
+      waveStats: { packetsOk, packetsFailed, threatsDeflected, threatsStruck },
+      battleLog: [...newEntries, ...battleLog].slice(0, 20),
+    })
+  },
+
+  /** Called from RAF loop once per second to keep HUD timer in sync. */
+  updateWaveTimer(seconds) {
+    set({ waveTimer: Math.max(0, Math.round(seconds)) })
   },
 
   /** debrief → build  (next mission — keep board state so player can improve) */
