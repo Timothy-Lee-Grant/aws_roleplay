@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { useGameStore } from '../store/gameStore.js'
-import HUD            from './HUD.jsx'
-import ServicePalette from './ServicePalette.jsx'
-import GameBoard      from './GameBoard.jsx'
-import MissionPanel   from './MissionPanel.jsx'
+import { useGameStore }  from '../store/gameStore.js'
+import HUD               from './HUD.jsx'
+import ServicePalette    from './ServicePalette.jsx'
+import GameBoard         from './GameBoard.jsx'
+import MissionPanel      from './MissionPanel.jsx'
+import TutorialOverlay   from './TutorialOverlay.jsx'
 
 const styles = {
   root: {
@@ -95,6 +96,7 @@ export default function GameScreen() {
         <MissionPanel />
       </div>
       {phase === 'wave' && <WaveOverlay />}
+      <TutorialOverlay />
     </div>
   )
 }

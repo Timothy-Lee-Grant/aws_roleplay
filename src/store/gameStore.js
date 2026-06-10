@@ -39,6 +39,11 @@ export const useGameStore = create((set, get) => ({
   completedMissions: [],
   activeMission:     0,
 
+  // ── Tutorial ─────────────────────────────────────────────────────────────────
+  // null = tutorial complete/skipped. 0–4 = active step index.
+  // Shown on first startGame(); cleared after step 4 or skip.
+  tutorialStep: null,
+
   // ── Wave / debrief data ──────────────────────────────────────────────────────
   // Populated by endWave(); read by DebriefScreen.
   waveResult: null, // { packetsOk, packetsFailed, threats, score, wellArchitected }
@@ -54,7 +59,7 @@ export const useGameStore = create((set, get) => ({
 
   // ── Phase transitions ────────────────────────────────────────────────────────
 
-  /** title → build  (new game) */
+  /** title → build  (new game — triggers in-game tutorial) */
   startGame() {
     set({
       phase:             'build',
@@ -65,6 +70,7 @@ export const useGameStore = create((set, get) => ({
       completedMissions: [],
       activeMission:     0,
       waveResult:        null,
+      tutorialStep:      0,   // start tutorial from step 0
       panX: 40, panY: 20, zoom: 1.0,
     })
   },
@@ -108,6 +114,22 @@ export const useGameStore = create((set, get) => ({
   /** debrief → build  (next mission — keep board state so player can improve) */
   continueFromDebrief() {
     set({ phase: 'build', waveResult: null })
+  },
+
+  /** Advance tutorial to next step, or end it */
+  advanceTutorial() {
+    const { tutorialStep } = get()
+    if (tutorialStep === null) return
+    if (tutorialStep >= 4) {
+      set({ tutorialStep: null })   // all steps done — hide overlay
+    } else {
+      set({ tutorialStep: tutorialStep + 1 })
+    }
+  },
+
+  /** Skip tutorial entirely */
+  skipTutorial() {
+    set({ tutorialStep: null })
   },
 
   // ── Actions ─────────────────────────────────────────────────────────────────

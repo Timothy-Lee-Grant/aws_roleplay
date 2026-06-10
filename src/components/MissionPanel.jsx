@@ -1,6 +1,7 @@
 import React from 'react'
-import { useGameStore } from '../store/gameStore.js'
+import { useGameStore }       from '../store/gameStore.js'
 import { MISSIONS, SERVICES } from '../game/constants.js'
+import ArchitectureFeedback   from './ArchitectureFeedback.jsx'
 
 export default function MissionPanel() {
   const placed            = useGameStore(s => s.placed)
@@ -63,6 +64,9 @@ export default function MissionPanel() {
           )
         })}
       </div>
+
+      {/* Real-time architecture feedback */}
+      <ArchitectureFeedback />
 
       {/* Tile info + legend at bottom */}
       <div style={S.legend}>

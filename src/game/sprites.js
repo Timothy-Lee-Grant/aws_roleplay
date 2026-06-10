@@ -21,18 +21,29 @@ const bnce = (t, s = 0.005) => Math.abs(Math.sin(t * s))
 // ─── Dispatch table ───────────────────────────────────────────────────────────
 
 export const SPRITE_FNS = {
-  igw:    drawIGW,
-  cf:     drawCF,
-  alb:    drawALB,
-  ec2:    drawEC2,
-  ecs:    drawECS,
-  nat:    drawNAT,
-  lambda: drawLambda,
-  rds:    drawRDS,
-  dynamo: drawDynamo,
-  s3:     drawS3,
-  sqs:    drawSQS,
-  iam:    drawIAM,
+  igw:         drawIGW,
+  cf:          drawCF,
+  alb:         drawALB,
+  ec2:         drawEC2,
+  ecs:         drawECS,
+  nat:         drawNAT,
+  lambda:      drawLambda,
+  rds:         drawRDS,
+  dynamo:      drawDynamo,
+  s3:          drawS3,
+  sqs:         drawSQS,
+  iam:         drawIAM,
+  sg:          drawSG,
+  rt:          drawRT,
+  route53:     drawRoute53,
+  apigw:       drawAPIGW,
+  sns:         drawSNS,
+  elasticache: drawElastiCache,
+  eventbridge: drawEventBridge,
+  waf:         drawWAF,
+  cognito:     drawCognito,
+  cloudwatch:  drawCloudWatch,
+  vpc_endpoint:drawVPCEndpoint,
 }
 
 export function drawSprite(ctx, cx, cy, serviceId, t) {
@@ -514,6 +525,376 @@ function drawIAM(ctx, cx, cy, t) {
   ctx.beginPath()
   ctx.arc(4, 8, 4, 0, Math.PI * 2)
   ctx.fill()
+
+  ctx.restore()
+}
+
+// ─── Security Group — "Permission Scroll" ─────────────────────────────────────
+function drawSG(ctx, cx, cy, t) {
+  ctx.save()
+  const pulse = osc(t, 0.004)
+  ctx.translate(cx, cy)
+
+  // Shield shape
+  ctx.beginPath()
+  ctx.moveTo(0, -14)
+  ctx.lineTo(12, -8)
+  ctx.lineTo(12, 2)
+  ctx.bezierCurveTo(12, 10, 6, 16, 0, 18)
+  ctx.bezierCurveTo(-6, 16, -12, 10, -12, 2)
+  ctx.lineTo(-12, -8)
+  ctx.closePath()
+  ctx.fillStyle = `rgba(60,120,200,${0.4 + pulse * 0.2})`
+  ctx.fill()
+  ctx.strokeStyle = `rgba(100,160,255,${0.6 + pulse * 0.3})`
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  ctx.fillStyle = `rgba(160,210,255,${0.7 + pulse * 0.3})`
+  ctx.font = 'bold 8px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('SG', 0, 2)
+
+  ctx.restore()
+}
+
+// ─── Route Table — "Road Map" ──────────────────────────────────────────────────
+function drawRT(ctx, cx, cy, t) {
+  ctx.save()
+  const float = wave(t, 0.0025) * 2
+  ctx.translate(cx, cy + float)
+
+  ctx.fillStyle = '#c8a860'
+  ctx.beginPath()
+  ctx.roundRect(-12, -12, 24, 24, 2)
+  ctx.fill()
+  ctx.strokeStyle = '#907840'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.strokeStyle = '#604820'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(-8, 0); ctx.lineTo(8, 0)
+  ctx.moveTo(0, -8); ctx.lineTo(0, 8)
+  ctx.stroke()
+
+  ctx.fillStyle = '#604820'
+  ctx.beginPath()
+  ctx.moveTo(8, 0); ctx.lineTo(5, -2); ctx.lineTo(5, 2)
+  ctx.closePath(); ctx.fill()
+
+  ctx.restore()
+}
+
+// ─── Route53 — "The Cartographer" ─────────────────────────────────────────────
+function drawRoute53(ctx, cx, cy, t) {
+  ctx.save()
+  const spin = (t * 0.0004) % (Math.PI * 2)
+  const pulse = osc(t, 0.003)
+  ctx.translate(cx, cy)
+
+  ctx.strokeStyle = `rgba(100,180,255,${0.6 + pulse * 0.3})`
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(0, 0, 13, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.strokeStyle = 'rgba(80,150,220,0.4)'
+  ctx.lineWidth = 0.8
+  for (const dy of [-5, 0, 5]) {
+    const r = Math.sqrt(Math.max(0, 169 - dy * dy))
+    ctx.beginPath(); ctx.ellipse(0, dy, r, r * 0.35, 0, 0, Math.PI * 2); ctx.stroke()
+  }
+
+  ctx.save()
+  ctx.rotate(spin)
+  ctx.strokeStyle = `rgba(100,180,255,0.5)`
+  ctx.lineWidth = 1
+  ctx.beginPath(); ctx.ellipse(0, 0, 5, 13, 0, 0, Math.PI * 2); ctx.stroke()
+  ctx.restore()
+
+  ctx.fillStyle = `rgba(160,210,255,${0.8 + pulse * 0.2})`
+  ctx.font = 'bold 7px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('53', 0, 0)
+
+  ctx.restore()
+}
+
+// ─── API Gateway — "The Drawbridge" ───────────────────────────────────────────
+function drawAPIGW(ctx, cx, cy, t) {
+  ctx.save()
+  const lift = osc(t, 0.002) * 5
+  ctx.translate(cx, cy)
+
+  ctx.fillStyle = '#7a9060'
+  ctx.fillRect(-14, -14, 6, 28)
+  ctx.fillRect(8, -14, 6, 28)
+
+  ctx.save()
+  ctx.translate(-4, -2)
+  ctx.rotate(-lift * 0.08)
+  ctx.fillStyle = '#b09060'
+  ctx.fillRect(0, 0, 8, 12)
+  ctx.strokeStyle = '#907840'
+  ctx.lineWidth = 1
+  for (let i = 2; i < 12; i += 3) {
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(8, i); ctx.stroke()
+  }
+  ctx.restore()
+
+  ctx.strokeStyle = '#c0a060'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([2, 2])
+  ctx.beginPath()
+  ctx.moveTo(-8, -6); ctx.lineTo(-4, 2 - lift)
+  ctx.moveTo(8, -6); ctx.lineTo(4, 2 - lift)
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  ctx.restore()
+}
+
+// ─── SNS — "The Herald" ───────────────────────────────────────────────────────
+function drawSNS(ctx, cx, cy, t) {
+  ctx.save()
+  ctx.translate(cx, cy)
+
+  ctx.beginPath()
+  ctx.moveTo(-4, -4)
+  ctx.lineTo(-4, 4)
+  ctx.lineTo(10, 10)
+  ctx.lineTo(10, -10)
+  ctx.closePath()
+  ctx.fillStyle = '#e09040'
+  ctx.fill()
+  ctx.strokeStyle = '#c07020'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.fillStyle = '#c07020'
+  ctx.fillRect(-10, -3, 7, 6)
+
+  const ringPulse = (t * 0.003) % 1
+  for (let i = 0; i < 3; i++) {
+    const phase = (ringPulse + i / 3) % 1
+    const r = 4 + phase * 12
+    const alpha = (1 - phase) * 0.5
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.strokeStyle = '#f0b060'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(12, 0, r, -Math.PI * 0.5, Math.PI * 0.5)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  ctx.restore()
+}
+
+// ─── ElastiCache — "Crystal Orb" ─────────────────────────────────────────────
+function drawElastiCache(ctx, cx, cy, t) {
+  ctx.save()
+  const glow = osc(t, 0.004)
+  const spin = (t * 0.0005) % (Math.PI * 2)
+  ctx.translate(cx, cy)
+
+  ctx.fillStyle = '#405080'
+  ctx.beginPath()
+  ctx.ellipse(0, 10, 8, 3, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillRect(-4, 6, 8, 5)
+
+  const grad = ctx.createRadialGradient(-3, -5, 1, 0, 0, 12)
+  grad.addColorStop(0, `rgba(180,220,255,${0.6 + glow * 0.4})`)
+  grad.addColorStop(0.5, `rgba(80,140,220,${0.4 + glow * 0.2})`)
+  grad.addColorStop(1, 'rgba(40,80,160,0.2)')
+  ctx.beginPath()
+  ctx.arc(0, 0, 12, 0, Math.PI * 2)
+  ctx.fillStyle = grad
+  ctx.fill()
+  ctx.strokeStyle = `rgba(140,200,255,${0.5 + glow * 0.4})`
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  ctx.save()
+  ctx.rotate(spin)
+  ctx.strokeStyle = `rgba(200,230,255,${0.3 + glow * 0.2})`
+  ctx.lineWidth = 0.8
+  ctx.beginPath(); ctx.ellipse(0, 0, 8, 3, 0, 0, Math.PI * 2); ctx.stroke()
+  ctx.restore()
+
+  ctx.restore()
+}
+
+// ─── EventBridge — "Prophecy Engine" ─────────────────────────────────────────
+function drawEventBridge(ctx, cx, cy, t) {
+  ctx.save()
+  const pulse = osc(t, 0.005)
+  ctx.translate(cx, cy)
+
+  ctx.fillStyle = '#302060'
+  ctx.beginPath()
+  ctx.ellipse(0, 12, 10, 4, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.beginPath()
+  ctx.arc(0, 0, 11, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(80,40,120,0.7)'
+  ctx.fill()
+  ctx.strokeStyle = `rgba(160,100,220,${0.6 + pulse * 0.4})`
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + t * 0.002
+    const r = 6 + pulse * 2
+    ctx.fillStyle = `rgba(200,150,255,${0.4 + pulse * 0.4})`
+    ctx.beginPath()
+    ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 1.5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  ctx.fillStyle = `rgba(220,180,255,${0.7 + pulse * 0.3})`
+  ctx.beginPath(); ctx.ellipse(0, 0, 5, 3, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(60,20,100,1)'
+  ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill()
+
+  ctx.restore()
+}
+
+// ─── WAF — "The Ward" ─────────────────────────────────────────────────────────
+function drawWAF(ctx, cx, cy, t) {
+  ctx.save()
+  const ripple = (t * 0.004) % (Math.PI * 2)
+  ctx.translate(cx, cy)
+
+  for (let i = 2; i >= 0; i--) {
+    const r = 8 + i * 3
+    const phase = (ripple + i * 1.0) % (Math.PI * 2)
+    const alpha = 0.15 + 0.1 * Math.sin(phase)
+    ctx.strokeStyle = `rgba(255,160,60,${alpha})`
+    ctx.lineWidth = 2
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke()
+  }
+
+  ctx.strokeStyle = '#e09040'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 6
+    const x = Math.cos(a) * 10, y = Math.sin(a) * 10
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  }
+  ctx.closePath(); ctx.stroke()
+
+  ctx.strokeStyle = `rgba(255,80,40,${0.7 + osc(t, 0.006) * 0.3})`
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(-4, -4); ctx.lineTo(4, 4)
+  ctx.moveTo(4, -4); ctx.lineTo(-4, 4)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+// ─── Cognito — "The Gatekeeper" ───────────────────────────────────────────────
+function drawCognito(ctx, cx, cy, t) {
+  ctx.save()
+  const float = wave(t, 0.003) * 2
+  ctx.translate(cx, cy + float)
+
+  ctx.fillStyle = '#486078'
+  ctx.fillRect(-8, -4, 16, 16)
+  for (let x = -8; x < 8; x += 4) {
+    ctx.fillRect(x, -8, 3, 5)
+  }
+  ctx.fillStyle = '#1a2a38'
+  ctx.beginPath()
+  ctx.arc(0, 8, 5, Math.PI, 0)
+  ctx.lineTo(5, 14); ctx.lineTo(-5, 14)
+  ctx.fill()
+
+  const keyGlow = osc(t, 0.004)
+  ctx.fillStyle = `rgba(100,200,255,${0.6 + keyGlow * 0.4})`
+  ctx.beginPath(); ctx.arc(0, -12, 4, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = `rgba(100,200,255,0.8)`
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, -2); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(2, -2); ctx.stroke()
+
+  ctx.restore()
+}
+
+// ─── CloudWatch — "All-Seeing Eye" ────────────────────────────────────────────
+function drawCloudWatch(ctx, cx, cy, t) {
+  ctx.save()
+  const blink = osc(t, 0.0015)
+  const scan = (t * 0.001) % (Math.PI * 2)
+  ctx.translate(cx, cy)
+
+  const lidH = Math.max(1, 10 - blink * 8)
+  ctx.beginPath()
+  ctx.ellipse(0, 0, 13, lidH, 0, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(20,30,20,0.8)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(100,200,100,0.7)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  if (lidH > 3) {
+    ctx.beginPath()
+    ctx.arc(0, 0, 6, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(40,160,40,0.8)'
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(0, 0, 3, 0, Math.PI * 2)
+    ctx.fillStyle = '#080808'
+    ctx.fill()
+
+    ctx.save()
+    ctx.rotate(scan)
+    ctx.strokeStyle = 'rgba(100,255,100,0.3)'
+    ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(12, 0); ctx.stroke()
+    ctx.restore()
+  }
+
+  ctx.restore()
+}
+
+// ─── VPC Endpoint — "Secret Passage" ──────────────────────────────────────────
+function drawVPCEndpoint(ctx, cx, cy, t) {
+  ctx.save()
+  const pulse = osc(t, 0.004)
+  ctx.translate(cx, cy)
+
+  ctx.fillStyle = '#3a5030'
+  ctx.fillRect(-14, -10, 28, 20)
+
+  ctx.strokeStyle = `rgba(100,200,80,${0.2 + pulse * 0.4})`
+  ctx.lineWidth = 1
+  ctx.strokeRect(-7, -8, 14, 18)
+
+  ctx.beginPath()
+  ctx.arc(0, -8, 7, Math.PI, 0)
+  ctx.stroke()
+
+  ctx.strokeStyle = `rgba(120,220,100,${0.6 + pulse * 0.4})`
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(-5, 2); ctx.lineTo(5, 2)
+  ctx.moveTo(2, -1); ctx.lineTo(5, 2); ctx.lineTo(2, 5)
+  ctx.stroke()
+
+  ctx.fillStyle = `rgba(120,255,100,${0.5 + pulse * 0.5})`
+  ctx.beginPath(); ctx.arc(5, 2, 2, 0, Math.PI * 2); ctx.fill()
 
   ctx.restore()
 }
