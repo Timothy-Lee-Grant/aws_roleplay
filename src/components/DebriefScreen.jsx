@@ -1,6 +1,6 @@
 import React from 'react'
-import { useGameStore } from '../store/gameStore.js'
-import { MISSIONS }     from '../game/constants.js'
+import { useGameStore }                        from '../store/gameStore.js'
+import { MISSIONS, SERVICES, HOURLY_COSTS, REAL_COSTS } from '../game/constants.js'
 
 // ── Well-Architected pillar config ────────────────────────────────────────────
 const PILLARS = [
@@ -36,6 +36,101 @@ function ScoreBar({ label, value, max, color }) {
   )
 }
 
+// ── Radar / spider chart ───────────────────────────────────────────────────────
+// Pentagon SVG with 5 axes — one per Well-Architected pillar.
+// Each axis is normalized 0→1 by its max score.
+const RADAR_SIZE  = 160  // px — width/height of the SVG square
+const RADAR_CX    = 80
+const RADAR_CY    = 84   // slightly lower to give room for labels
+const RADAR_R     = 56   // max radius for a full score
+
+function polarToXY(angleDeg, r, cx, cy) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)]
+}
+
+function RadarChart({ pillars, values }) {
+  const n = pillars.length
+  const step = 360 / n
+
+  // Grid rings at 25%, 50%, 75%, 100%
+  const rings = [0.25, 0.5, 0.75, 1.0]
+
+  // Polygon points for each ring
+  const ringPoints = rings.map(pct =>
+    pillars.map((_, i) => polarToXY(i * step, RADAR_R * pct, RADAR_CX, RADAR_CY)).map(p => p.join(',')).join(' ')
+  )
+
+  // Axis lines
+  const axes = pillars.map((_, i) => {
+    const [x, y] = polarToXY(i * step, RADAR_R, RADAR_CX, RADAR_CY)
+    return { x, y }
+  })
+
+  // Data polygon — normalize each value by its max
+  const dataPoints = pillars.map((p, i) => {
+    const ratio = Math.min(1, (values[p.key] ?? 0) / p.max)
+    return polarToXY(i * step, RADAR_R * ratio, RADAR_CX, RADAR_CY)
+  })
+  const dataStr = dataPoints.map(p => p.join(',')).join(' ')
+
+  // Label positions — slightly beyond the grid edge
+  const labels = pillars.map((p, i) => {
+    const [x, y] = polarToXY(i * step, RADAR_R + 18, RADAR_CX, RADAR_CY)
+    return { ...p, x, y, angle: i * step }
+  })
+
+  return (
+    <svg
+      width={RADAR_SIZE} height={RADAR_SIZE}
+      viewBox={`0 0 ${RADAR_SIZE} ${RADAR_SIZE}`}
+      style={{ display: 'block', margin: '0 auto', overflow: 'visible' }}
+    >
+      {/* Background rings */}
+      {ringPoints.map((pts, ri) => (
+        <polygon key={ri} points={pts}
+          fill="none" stroke="rgba(96,120,64,0.18)" strokeWidth={0.8} />
+      ))}
+
+      {/* Axis spokes */}
+      {axes.map((ax, i) => (
+        <line key={i}
+          x1={RADAR_CX} y1={RADAR_CY} x2={ax.x} y2={ax.y}
+          stroke="rgba(96,120,64,0.22)" strokeWidth={0.8} />
+      ))}
+
+      {/* Data polygon fill */}
+      <polygon points={dataStr}
+        fill="rgba(80,160,100,0.18)"
+        stroke="rgba(96,200,120,0.7)"
+        strokeWidth={1.5}
+        strokeLinejoin="round" />
+
+      {/* Data points */}
+      {dataPoints.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={3}
+          fill={pillars[i].color}
+          stroke="rgba(0,0,0,0.5)" strokeWidth={0.8} />
+      ))}
+
+      {/* Pillar labels */}
+      {labels.map((lb, i) => {
+        const anchor = lb.angle < 10 || lb.angle > 350 ? 'middle'
+          : lb.angle < 180 ? 'start' : lb.angle > 180 ? 'end' : 'middle'
+        return (
+          <text key={i} x={lb.x} y={lb.y}
+            textAnchor={anchor} dominantBaseline="middle"
+            fontSize="8" fill={lb.color} fontFamily="sans-serif"
+            style={{ letterSpacing: '0.05em' }}
+          >
+            {lb.label}
+          </text>
+        )
+      })}
+    </svg>
+  )
+}
+
 function StatCard({ icon, value, label, sub }) {
   return (
     <div style={{
@@ -63,8 +158,18 @@ export default function DebriefScreen() {
   const waveResult        = useGameStore(s => s.waveResult)
   const completedMissions = useGameStore(s => s.completedMissions)
   const activeMission     = useGameStore(s => s.activeMission)
+  const placed            = useGameStore(s => s.placed)
   const continueFromDebrief = useGameStore(s => s.continueFromDebrief)
   const startGame         = useGameStore(s => s.startGame)
+
+  // Cost estimate — same formula as HUD burn pill, scaled to monthly
+  const hourlyBurn      = placed.reduce((sum, p) => sum + (HOURLY_COSTS[p.id] ?? 0), 0)
+  const estimatedMonthly = Math.round(hourlyBurn * 730 / 10)
+  // Unique service ids present, with count, sorted by cost descending
+  const serviceCount = placed.reduce((acc, p) => { acc[p.id] = (acc[p.id] ?? 0) + 1; return acc }, {})
+  const uniqueIds = Object.keys(serviceCount).sort(
+    (a, b) => (HOURLY_COSTS[b] ?? 0) - (HOURLY_COSTS[a] ?? 0)
+  )
 
   const result = waveResult ?? {
     packetsOk: 0, packetsFailed: 0, threats: 0, score: 0,
@@ -104,18 +209,21 @@ export default function DebriefScreen() {
 
           <div style={S.divider} />
 
-          {/* Pillar scores */}
+          {/* Pillar scores — radar chart + score bars */}
           <div style={{ padding: '0 4px' }}>
             <div style={S.sectionLabel}>Well-Architected Pillars</div>
-            {PILLARS.map(p => (
-              <ScoreBar
-                key={p.key}
-                label={p.label}
-                value={result.wellArchitected[p.key] ?? 0}
-                max={p.max}
-                color={p.color}
-              />
-            ))}
+            <RadarChart pillars={PILLARS} values={result.wellArchitected} />
+            <div style={{ marginTop: '16px' }}>
+              {PILLARS.map(p => (
+                <ScoreBar
+                  key={p.key}
+                  label={p.label}
+                  value={result.wellArchitected[p.key] ?? 0}
+                  max={p.max}
+                  color={p.color}
+                />
+              ))}
+            </div>
           </div>
 
           <div style={S.divider} />
@@ -129,6 +237,34 @@ export default function DebriefScreen() {
               <StatCard icon="⚠️" value={result.threats}       label="Threats"     />
             </div>
           </div>
+
+          {placed.length > 0 && <>
+            <div style={S.divider} />
+
+            {/* Monthly cost estimate */}
+            <div>
+              <div style={S.sectionLabel}>Estimated Monthly Cost</div>
+              <div style={S.costTotalRow}>
+                <span style={S.costTotal}>~${estimatedMonthly}</span>
+                <span style={S.costTotalUnit}>/mo</span>
+                <span style={S.costTotalNote}>real AWS equivalent</span>
+              </div>
+              <div style={S.costTable}>
+                {uniqueIds.map(id => {
+                  const svc = SERVICES.find(s => s.id === id)
+                  const count = serviceCount[id]
+                  return (
+                    <div key={id} style={S.costRow}>
+                      <span style={S.costName}>
+                        {svc?.aws ?? id}{count > 1 ? ` ×${count}` : ''}
+                      </span>
+                      <span style={S.costVal}>{REAL_COSTS[id] ?? '—'}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </>}
         </div>
 
         {/* Right column — next steps */}
@@ -274,6 +410,37 @@ const S = {
     padding: '7px 0',
     borderBottom: '1px solid rgba(96,120,64,0.08)',
     fontSize: '12px', letterSpacing: '0.05em',
+  },
+  costTotalRow: {
+    display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '10px',
+  },
+  costTotal: {
+    fontFamily: "'Cinzel', serif", fontSize: '28px', fontWeight: 700,
+    color: '#e0c060', lineHeight: 1,
+  },
+  costTotalUnit: {
+    fontFamily: "'Cinzel', serif", fontSize: '14px', color: '#a08040',
+  },
+  costTotalNote: {
+    fontSize: '10px', color: '#3a5030', letterSpacing: '0.15em',
+    textTransform: 'uppercase', marginLeft: '4px',
+  },
+  costTable: {
+    display: 'flex', flexDirection: 'column', gap: '4px',
+  },
+  costRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+    padding: '4px 0',
+    borderBottom: '1px solid rgba(96,120,64,0.08)',
+    gap: '8px',
+  },
+  costName: {
+    fontSize: '11px', color: '#7a9870', fontFamily: 'sans-serif',
+    whiteSpace: 'nowrap',
+  },
+  costVal: {
+    fontSize: '10px', color: '#5a7850', fontFamily: 'sans-serif',
+    textAlign: 'right', flexShrink: 0,
   },
   feedbackBox: {
     background: 'rgba(255,255,255,0.02)',

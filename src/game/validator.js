@@ -120,6 +120,55 @@ export function validateArchitecture(placed, getNeighbors) {
       'EC2/Lambda in the private subnet cannot reach the internet or AWS services (S3, DynamoDB) without a Secret Tunnel (NAT) or Secret Passage (VPC Endpoint). Add one if they need outbound access.')
   }
 
+  // ── Route Table checks (5.2) ──────────────────────────────────────────────
+  // Route Tables are the traffic routing mechanism for subnets.
+  // Public subnet RT: must have 0.0.0.0/0 → IGW
+  // Private subnet RT: must have 0.0.0.0/0 → NAT (for internet) or VPC Endpoint (for AWS services)
+  // Without a correct route, even correctly placed services can't send/receive traffic.
+
+  const hasRT = hasService(placed, 'rt')
+  const rtInstances = placed.filter(p => p.id === 'rt')
+
+  // Public compute exists but no Route Table anywhere
+  if (hasPublicCompute && !hasRT) {
+    push('warning', 'MISSING_PUBLIC_RT',
+      'No Route Table in public subnet',
+      'Your public subnet has compute but no Road Map (Route Table). In real AWS, a subnet without a route table has no routing — not even between instances. Place a Road Map tile in the public subnet and connect it to the Iron Gate (IGW).')
+  }
+
+  // Route Tables placed but not connected to IGW (public zone RT without IGW neighbour)
+  const publicRTs = rtInstances.filter(rt => rt.zone === 'public')
+  const publicRTsWithoutIGW = publicRTs.filter(rt => {
+    const nbrs = getNeighbors(rt.row, rt.col)
+    return !placed.some(p => p.id === 'igw' && nbrs.some(n => n.row === p.row && n.col === p.col))
+  })
+  if (publicRTsWithoutIGW.length > 0 && hasPublicServices) {
+    push('warning', 'RT_NO_IGW_ROUTE',
+      'Public Route Table has no IGW route',
+      'A Road Map (Route Table) in the public subnet must be adjacent to the Iron Gate (IGW) to represent the route 0.0.0.0/0 → igw-xxxxxxxx. Without this, your public subnet has no internet connectivity.')
+  }
+
+  // Private compute exists but no Route Table
+  if (hasPrivateCompute && !hasRT) {
+    push('info', 'MISSING_PRIVATE_RT',
+      'No Route Table in private subnet',
+      'Private subnet compute exists but no Road Map (Route Table) was placed. In real AWS, every subnet needs a route table. Private subnet route tables should route to a NAT Gateway for outbound internet access.')
+  }
+
+  // Private Route Tables without NAT or VPC Endpoint connection
+  const privateRTs = rtInstances.filter(rt => rt.zone === 'private')
+  const privateRTsWithoutOutbound = privateRTs.filter(rt => {
+    const nbrs = getNeighbors(rt.row, rt.col)
+    const hasNATNbr = placed.some(p => p.id === 'nat' && nbrs.some(n => n.row === p.row && n.col === p.col))
+    const hasEndpointNbr = placed.some(p => p.id === 'vpc_endpoint' && nbrs.some(n => n.row === p.row && n.col === p.col))
+    return !hasNATNbr && !hasEndpointNbr
+  })
+  if (privateRTsWithoutOutbound.length > 0 && hasPrivateCompute) {
+    push('info', 'RT_NO_OUTBOUND',
+      'Private Route Table not connected to NAT or Endpoint',
+      'Place your Road Map (Route Table) adjacent to a Secret Tunnel (NAT) or Secret Passage (VPC Endpoint) to represent the outbound route. Without it, private resources have no way out of the VPC.')
+  }
+
   // ── Security best practices ───────────────────────────────────────────────
 
   // RDS without Security Group
@@ -180,6 +229,36 @@ export function validateArchitecture(placed, getNeighbors) {
     push('info', 'NO_MONITORING',
       'No monitoring configured',
       'You have compute and data services but no All-Seeing Eye (CloudWatch). Without monitoring you won\'t know when services fail, spike in cost, or degrade. Add CloudWatch adjacent to critical services.')
+  }
+
+  // ── Multi-AZ checks ───────────────────────────────────────────────────────
+  // The board has two AZs (az1 = cols 2–4, az2 = cols 6–8).
+  // Critical services should span both AZs for high availability.
+
+  // Single-AZ RDS (only in one AZ = single point of failure)
+  const rdsInstances  = placed.filter(p => p.id === 'rds')
+  const rdsInAz1 = rdsInstances.some(p => p.az === 'az1')
+  const rdsInAz2 = rdsInstances.some(p => p.az === 'az2')
+  if (rdsInstances.length > 0 && !(rdsInAz1 && rdsInAz2)) {
+    push('warning', 'SINGLE_AZ_RDS',
+      'RDS is single-AZ — one failure ends it all',
+      'Your Great Library (RDS) is only in one Availability Zone. In real AWS, a single-AZ RDS has no automatic failover — if that AZ has an outage, your database goes down. Deploy RDS in both AZ-1 and AZ-2 for Multi-AZ failover.')
+  }
+
+  // Good: multi-AZ RDS
+  if (rdsInAz1 && rdsInAz2) {
+    push('info', 'MULTI_AZ_RDS',
+      '✓ Multi-AZ RDS deployed',
+      'Excellent — RDS instances in both AZ-1 and AZ-2. AWS Multi-AZ RDS automatically fails over to the standby replica within 60–120 seconds of a primary failure. This meets the Well-Architected Reliability pillar.')
+  }
+
+  // ALB only in one AZ when compute spans both
+  const ec2InAz1 = placed.some(p => p.id === 'ec2' && p.az === 'az1')
+  const ec2InAz2 = placed.some(p => p.id === 'ec2' && p.az === 'az2')
+  if (ec2InAz1 && ec2InAz2 && hasService(placed, 'alb')) {
+    push('info', 'MULTI_AZ_COMPUTE',
+      '✓ Compute spans both AZs',
+      'EC2 instances in both AZ-1 and AZ-2 behind an ALB. In real AWS, ALB automatically distributes traffic across AZs and routes around failed instances. This is the recommended HA pattern.')
   }
 
   // ── Positive reinforcement ────────────────────────────────────────────────

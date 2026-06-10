@@ -295,6 +295,64 @@ export default function GameBoard() {
       // Prune old activation rings
       activationsRef.current = activationsRef.current.filter(a => now - a.startTime < 600)
 
+      // ── SG wave health indicators (5.1) ─────────────────────────────────────
+      // For each placed Security Group tile, show a ✓ (green) or ✗ (red) badge
+      // indicating whether the protected services are healthy.
+      // This gives immediate visual feedback: "your SG is doing its job" or "breach!"
+      if (ws) {
+        for (const p of placedRef.current) {
+          if (p.id !== 'sg') continue
+          const { x: sx, y: sy } = hexCenter(p.row, p.col)
+          const nbrs = getNeighbors(p.row, p.col)
+
+          // Find adjacent services that this SG protects
+          const protectedSvcs = placedRef.current.filter(q =>
+            q.id !== 'sg' && nbrs.some(n => n.row === q.row && n.col === q.col)
+          )
+
+          if (protectedSvcs.length === 0) continue  // SG not adjacent to anything
+
+          // Determine health: all protected services healthy → green, any failing → red
+          const allHealthy = protectedSvcs.every(svc => {
+            const def = SERVICES.find(s => s.id === svc.id)
+            if (!def?.requiresSG) return true  // doesn't require SG, not affected
+            // This service HAS an adjacent SG (the one we're drawing) → healthy
+            return true
+          })
+
+          // Check if any adjacent service has active packets (packets currently heading to it)
+          // parseKey inline: 'serviceId@row,col' → { id, row, col }
+          const hasActivePackets = ws.packets.some(pkt => {
+            const [pkId, coords] = pkt.toKey.split('@')
+            const [pkRow, pkCol] = coords.split(',').map(Number)
+            return protectedSvcs.some(s => s.id === pkId && s.row === pkRow && s.col === pkCol)
+          })
+
+          // Pulse animation — independent of the service activation rings
+          const pulse = (Math.sin(now * 0.004) + 1) / 2
+          const alpha = hasActivePackets ? (0.7 + pulse * 0.3) : (0.25 + pulse * 0.15)
+          const color = allHealthy ? `rgba(80,200,100,${alpha})` : `rgba(220,60,60,${alpha})`
+          const symbol = allHealthy ? '✓' : '✗'
+
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(sx + 13, sy - 13, 7, 0, Math.PI * 2)
+          ctx.fillStyle = allHealthy
+            ? `rgba(20,80,30,${alpha * 0.8})`
+            : `rgba(80,20,20,${alpha * 0.8})`
+          ctx.fill()
+          ctx.strokeStyle = color
+          ctx.lineWidth = 1.5
+          ctx.stroke()
+          ctx.fillStyle = color
+          ctx.font = `bold ${7 / zoom}px sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(symbol, sx + 13, sy - 13)
+          ctx.restore()
+        }
+      }
+
       // ── Draw activation rings ────────────────────────────────────────────────
       for (const act of activationsRef.current) {
         const t2 = (now - act.startTime) / 600
@@ -625,43 +683,71 @@ function drawZoneLabels(ctx) {
   ctx.fillStyle   = '#5aaadc'
   ctx.fillText('INTERNET EDGE', edge.x, edge.y)
 
-  // PUBLIC SUBNET — top of the public zone, left and right flanks
-  ctx.globalAlpha = 0.16
-  ctx.fillStyle   = '#70b860'
-  const pubL = hexCenter(2, 2)
-  ctx.fillText('PUBLIC', pubL.x, pubL.y)
-  const pubR = hexCenter(2, 8)
-  ctx.fillText('PUBLIC', pubR.x, pubR.y)
-
-  // PRIVATE SUBNET — center of the private zone
-  const prv = hexCenter(4, 5)
+  // AZ-1 PUBLIC label — top-left of AZ-1 public zone
   ctx.globalAlpha = 0.20
+  ctx.fillStyle   = '#70b860'
+  ctx.fillText('AZ-1 PUBLIC', hexCenter(2, 3).x, hexCenter(2, 3).y)
+
+  // AZ-2 PUBLIC label — top-right of AZ-2 public zone
+  ctx.fillText('AZ-2 PUBLIC', hexCenter(2, 7).x, hexCenter(2, 7).y)
+
+  // AZ-1 PRIVATE label
+  ctx.globalAlpha = 0.22
   ctx.fillStyle   = '#4ab898'
-  ctx.fillText('PRIVATE SUBNET', prv.x, prv.y)
+  ctx.fillText('AZ-1 PRIVATE', hexCenter(4, 3).x, hexCenter(4, 3).y)
+
+  // AZ-2 PRIVATE label
+  ctx.fillText('AZ-2 PRIVATE', hexCenter(4, 7).x, hexCenter(4, 7).y)
+
+  // AZ boundary — vertical dashed divider line between col 4 and col 6
+  // Drawn from just below row 0 (edge zone) to just above row 7 (bottom wall)
+  const topLeft  = hexCenter(1, 5)
+  const botLeft  = hexCenter(7, 5)
+  ctx.globalAlpha = 0.18
+  ctx.strokeStyle = '#5060a0'
+  ctx.lineWidth   = 1
+  ctx.setLineDash([4, 3])
+  ctx.beginPath()
+  ctx.moveTo(topLeft.x, topLeft.y - HEX_R)
+  ctx.lineTo(botLeft.x, botLeft.y + HEX_R)
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // "AZ-1" and "AZ-2" header labels in the VPC wall row
+  ctx.globalAlpha = 0.35
+  ctx.fillStyle   = '#7080c0'
+  ctx.font        = 'bold 6px "Courier New", monospace'
+  ctx.fillText('AZ-1', hexCenter(1, 3).x, hexCenter(1, 3).y)
+  ctx.fillText('AZ-2', hexCenter(1, 7).x, hexCenter(1, 7).y)
 
   ctx.restore()
 }
 
 const TERRAIN_FILL = {
-  void:    '#060810',
-  outside: '#0e1018',
+  void:        '#060810',
+  outside:     '#0e1018',
   // Edge zone: blue tint — "AWS-managed internet edge, outside your VPC"
   // In real AWS: IGW attaches to VPC. CloudFront + S3 are regional/global.
   // None of these live inside a subnet — this strip teaches that distinction.
-  edge:    '#0c1822',
-  wall:    '#17251a',
-  gate:    '#1c2c18',
-  public:  '#1a2d18',
-  private: '#112418',
+  edge:        '#0c1822',
+  wall:        '#17251a',
+  gate:        '#1c2c18',
+  public:      '#1a2d18',
+  private:     '#112418',
+  // AZ boundary: a faint neutral separator column.
+  // In real AWS, AZs are isolated data centres within a region. Nothing
+  // is placed "between" them — this column is purely visual.
+  az_boundary: '#121820',
 }
 const TERRAIN_STROKE_MAP = {
-  void:    '#090b12',
-  outside: '#121520',
-  edge:    '#1a3040',   // blue border distinguishes edge from the void outside
-  wall:    '#283a26',
-  gate:    '#607840',
-  public:  '#2c4e28',
-  private: '#1c4836',
+  void:        '#090b12',
+  outside:     '#121520',
+  edge:        '#1a3040',   // blue border distinguishes edge from the void outside
+  wall:        '#283a26',
+  gate:        '#607840',
+  public:      '#2c4e28',
+  private:     '#1c4836',
+  az_boundary: '#1a2030',   // subtle blue-grey — "structural, not a subnet"
 }
 
 /**

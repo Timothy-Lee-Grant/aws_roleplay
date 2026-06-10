@@ -230,7 +230,7 @@ export const useGameStore = create((set, get) => ({
     const newGrid = grid.map(r => r.map(c => ({ ...c })))
     newGrid[row][col].service = selectedServiceId
 
-    const newEntry = { id: selectedServiceId, row, col, zone: cell.terrain, conns: svcDef.conns }
+    const newEntry = { id: selectedServiceId, row, col, zone: cell.terrain, az: cell.az ?? null, conns: svcDef.conns }
     const newPlaced = [...placed, newEntry]
 
     set({

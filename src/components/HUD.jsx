@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
-import { useGameStore }       from '../store/gameStore.js'
-import { MISSIONS }           from '../game/constants.js'
-import { toggleMute, isMuted } from '../game/audio.js'
+import { useGameStore }            from '../store/gameStore.js'
+import { MISSIONS, SERVICES, HOURLY_COSTS } from '../game/constants.js'
+import { toggleMute, isMuted }    from '../game/audio.js'
 
 export default function HUD() {
   const gold              = useGameStore(s => s.gold)
@@ -13,6 +13,9 @@ export default function HUD() {
   const waveStats         = useGameStore(s => s.waveStats)
   const startWave         = useGameStore(s => s.startWave)
   const currentMission    = MISSIONS[activeMission]
+
+  // Total hourly gold burn rate from all placed services
+  const hourlyBurn = placed.reduce((sum, p) => sum + (HOURLY_COSTS[p.id] ?? 0), 0)
 
   // Local state tracks mute icon — mirrors the audio module's mute flag
   const [muted, setMuted] = useState(false)
@@ -41,6 +44,14 @@ export default function HUD() {
         <Pill icon="⚔️" label="Deployed" value={placed.length} />
         <Pill icon="✅" label="Complete"  value={`${completedMissions.length}/${MISSIONS.length}`} />
         <Pill icon="🪙" label="Gold"      value={gold} />
+        {hourlyBurn > 0 && (
+          <Pill
+            icon="🕐"
+            label="Burn"
+            value={`${hourlyBurn}🪙/hr`}
+            title={`~${(hourlyBurn * 730 / 10).toFixed(0)} real $/mo`}
+          />
+        )}
       </div>
 
       {/* Wave trigger — only shown during build phase */}
@@ -85,9 +96,9 @@ export default function HUD() {
   )
 }
 
-function Pill({ icon, label, value }) {
+function Pill({ icon, label, value, title }) {
   return (
-    <div style={S.pill}>
+    <div style={S.pill} title={title ?? ''}>
       {icon} {label} <span style={S.pillVal}>{value}</span>
     </div>
   )

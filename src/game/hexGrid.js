@@ -90,11 +90,22 @@ export function getNeighbors(row, col) {
 // ─── Grid initialisation ─────────────────────────────────────────────────────
 
 /**
- * Build the initial 2D grid. Each cell: { terrain, service: null }
+ * Build the initial 2D grid.
+ *
+ * Each cell: { terrain, service: null, az: 'az1'|'az2'|'boundary'|null }
+ *
+ * Multi-AZ layout (col 5 = AZ boundary divider):
+ *   AZ-1: cols 2–4  (public + private subnet)
+ *   AZ boundary: col 5  (AZ_BOUNDARY terrain — no service placement allowed)
+ *   AZ-2: cols 6–8  (public + private subnet)
+ *
+ * Real AWS: deploying across Availability Zones is the foundation of high
+ * availability. Each AZ is an isolated data centre. If AZ-1 fails, AZ-2
+ * continues serving traffic — but only if you placed resources in both.
  */
 export function buildGrid() {
   const g = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ terrain: TERRAIN.OUTSIDE, service: null }))
+    Array.from({ length: COLS }, () => ({ terrain: TERRAIN.OUTSIDE, service: null, az: null }))
   )
 
   // VPC wall border
@@ -102,26 +113,46 @@ export function buildGrid() {
     for (let c = a; c <= b; c++) g[r][c].terrain = TERRAIN.WALL
   })
 
-  // Public subnet
-  ;[[2,[2,8]],[3,[2,8]],[4,[2,8]],[5,[2,8]],[6,[2,8]]].forEach(([r,[a,b]])=>{
+  // Public subnet — cols 2–4 (AZ-1) and 6–8 (AZ-2); col 5 stays WALL for now
+  ;[[2,[2,4]],[3,[2,4]],[4,[2,4]],[5,[2,4]],[6,[2,4]],
+    [2,[6,8]],[3,[6,8]],[4,[6,8]],[5,[6,8]],[6,[6,8]]].forEach(([r,[a,b]])=>{
     for (let c = a; c <= b; c++) g[r][c].terrain = TERRAIN.PUBLIC
   })
 
-  // Private subnet (inner sanctum)
-  ;[[3,[4,7]],[4,[3,7]],[5,[4,7]]].forEach(([r,[a,b]])=>{
+  // Private subnet — AZ-1 cols 3–4, AZ-2 cols 6–7 (col 5 never private)
+  ;[[3,[3,4]],[4,[3,4]],[5,[3,4]],
+    [3,[6,7]],[4,[6,7]],[5,[6,7]]].forEach(([r,[a,b]])=>{
     for (let c = a; c <= b; c++) g[r][c].terrain = TERRAIN.PRIVATE
   })
 
-  // Gate tiles
-  g[1][5].terrain = TERRAIN.GATE
-  g[7][5].terrain = TERRAIN.GATE
+  // Gate tiles on the top and bottom wall (VPC attachment points)
+  g[1][2].terrain = TERRAIN.GATE   // AZ-1 top entry
+  g[1][7].terrain = TERRAIN.GATE   // AZ-2 top entry
+  g[7][2].terrain = TERRAIN.GATE   // AZ-1 bottom entry
+  g[7][7].terrain = TERRAIN.GATE   // AZ-2 bottom entry
+
+  // AZ Boundary column — col 5, rows 1–7 (within the VPC)
+  // Non-placeable; acts as visual separator between the two Availability Zones.
+  for (let r = 1; r <= 7; r++) {
+    g[r][5].terrain = TERRAIN.AZ_BOUNDARY
+  }
 
   // Edge zone: the row outside the VPC wall (row 0, cols 2–8).
-  // This is where internet-edge AWS services live: IGW, CloudFront, S3.
-  // They are NOT inside the VPC — they sit at the boundary of AWS infrastructure.
-  // In real AWS: IGW attaches to the VPC (not inside it). CloudFront and S3 are
-  // regional/global services that exist entirely outside any VPC subnet.
+  // Internet-edge AWS services (IGW, CloudFront, S3, Route53) live here —
+  // outside the VPC entirely, not in any subnet.
   for (let c = 2; c <= 8; c++) g[0][c].terrain = TERRAIN.EDGE
+
+  // ── Assign AZ properties ──────────────────────────────────────────────────
+  // All cells inside the VPC (wall rows 1–7) get an az tag based on column.
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = g[r][c]
+      if (c >= 2 && c <= 4 && r >= 1 && r <= 7) cell.az = 'az1'
+      else if (c === 5 && r >= 1 && r <= 7)      cell.az = 'boundary'
+      else if (c >= 6 && c <= 8 && r >= 1 && r <= 7) cell.az = 'az2'
+      // else: edge, outside, void → az stays null
+    }
+  }
 
   return g
 }
@@ -147,6 +178,8 @@ export function drawHexPath(ctx, cx, cy, r = HEX_R) {
 
 export function canPlaceHere(terrain, svcDef) {
   if (!svcDef) return false
+  // AZ_BOUNDARY tiles can never host services — they are visual dividers only.
+  if (terrain === TERRAIN.AZ_BOUNDARY) return false
   // Edge-zone services (IGW, CloudFront, S3) live OUTSIDE the VPC —
   // they must go on edge tiles (row 0 strip), not inside any subnet.
   if (svcDef.zone === 'edge'    && terrain !== TERRAIN.EDGE)    return false

@@ -9,13 +9,14 @@ export const BOARD_PAD_Y = 36
 
 // ─── Terrain IDs ──────────────────────────────────────────────────────────────
 export const TERRAIN = {
-  VOID:    'void',
-  OUTSIDE: 'outside',
-  EDGE:    'edge',     // Internet edge — IGW, CloudFront, Route53 live here (outside VPC)
-  WALL:    'wall',     // VPC perimeter — structural, no placement
-  GATE:    'gate',     // VPC attachment point — visual only, no placement
-  PUBLIC:  'public',   // AWS Public Subnet
-  PRIVATE: 'private',  // AWS Private Subnet
+  VOID:         'void',
+  OUTSIDE:      'outside',
+  EDGE:         'edge',        // Internet edge — IGW, CloudFront, Route53 live here (outside VPC)
+  WALL:         'wall',        // VPC perimeter — structural, no placement
+  GATE:         'gate',        // VPC attachment point — visual only, no placement
+  PUBLIC:       'public',      // AWS Public Subnet (AZ-1 cols 2-4, AZ-2 cols 6-8)
+  PRIVATE:      'private',     // AWS Private Subnet (AZ-1 cols 2-4, AZ-2 cols 6-8)
+  AZ_BOUNDARY:  'az_boundary', // Vertical divider between AZ-1 and AZ-2 — no placement
 }
 
 // ─── Terrain colours ──────────────────────────────────────────────────────────
@@ -36,6 +37,66 @@ export const TERRAIN_STROKE = {
   gate:    '#607840',
   public:  '#2c4e28',
   private: '#1c4836',
+}
+
+// ─── Hourly cost model (5.5 — Real Cost Display) ──────────────────────────────
+//
+// Game gold per hour each placed service consumes.
+// Scaled to be roughly proportional to real AWS pricing.
+// Teaches the key insight: not all services are free to run —
+// EC2/RDS/NAT accumulate cost per hour regardless of load.
+export const HOURLY_COSTS = {
+  igw:         0,   // Free — charges only on data transfer out ($0.09/GB)
+  cf:          1,   // ~$0.01/hr effective (CloudFront pay-per-request, very low idle)
+  alb:         5,   // $0.018/hr + LCU charges — always-on cost
+  ec2:         4,   // t3.medium ~$0.042/hr on-demand
+  ecs:         4,   // Fargate t3.medium equivalent ~$0.0445/hr
+  nat:         4,   // $0.045/hr + $0.045/GB data — one of the biggest hidden costs
+  lambda:      0,   // Pay per invocation — $0 idle (huge cost advantage vs EC2!)
+  rds:         7,   // db.t3.medium ~$0.068/hr — always running even when idle
+  dynamo:      0,   // Pay per request — $0 idle (serverless DB)
+  s3:          0,   // Pay per GB stored + requests — negligible hourly
+  sqs:         0,   // Pay per message — $0 idle
+  iam:         0,   // Free
+  sg:          0,   // Free
+  rt:          0,   // Free
+  route53:     0,   // $0.50/hosted zone/month = $0.0007/hr
+  apigw:       1,   // ~$3.50/million API calls — low idle, spikes under load
+  sns:         0,   // Pay per notification — $0 idle
+  elasticache: 3,   // cache.t3.medium ~$0.034/hr — always on
+  eventbridge: 0,   // $1/million events — $0 idle
+  waf:         1,   // ~$5/mo base + $0.60/million requests
+  cognito:     0,   // First 50k MAU free — effectively $0
+  cloudwatch:  1,   // ~$0.30/metric/month per service monitored
+  vpc_endpoint: 1,  // $0.01/hr per AZ (interface endpoints)
+}
+
+// Human-readable real AWS monthly cost for the DebriefScreen estimator.
+// Values at minimal/typical usage. Shown as informational cost education.
+export const REAL_COSTS = {
+  igw:         'Free (+ $0.09/GB out)',
+  cf:          '~$0/mo + $0.01/10k requests',
+  alb:         '~$16/mo + LCU charges',
+  ec2:         '~$31/mo (t3.medium)',
+  ecs:         '~$32/mo (Fargate)',
+  nat:         '~$33/mo (+ $0.045/GB)',
+  lambda:      '$0.20/million requests',
+  rds:         '~$50/mo (db.t3.medium)',
+  dynamo:      '$1.25/million reads',
+  s3:          '$0.023/GB stored',
+  sqs:         '$0.40/million messages',
+  iam:         'Free',
+  sg:          'Free',
+  rt:          'Free',
+  route53:     '$0.50/zone/month',
+  apigw:       '$3.50/million calls',
+  sns:         '$0.50/million notifications',
+  elasticache: '~$25/mo (cache.t3.medium)',
+  eventbridge: '$1/million events',
+  waf:         '~$6/mo + $0.60/million req',
+  cognito:     'Free up to 50k MAU',
+  cloudwatch:  '~$0.30/metric/month',
+  vpc_endpoint: '$7.30/mo per AZ',
 }
 
 // ─── Services ─────────────────────────────────────────────────────────────────
