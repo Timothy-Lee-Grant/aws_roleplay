@@ -28,6 +28,11 @@ export const useGameStore = create((set, get) => ({
   // 'debrief'→ wave complete, score shown, player can advance to next mission
   phase: 'title',
 
+  // ── Learning mode ────────────────────────────────────────────────────────────
+  // 'adventure' → fantasy theme, narrative missions, all ages
+  // 'architect' → real AWS names, exam-style scoring, SAA-C03 prep
+  mode: 'adventure',
+
   // ── Game state ──────────────────────────────────────────────────────────────
   grid:              buildGrid(),   // 2D array of { terrain, service }
   placed:            [],            // [{ id, row, col, zone, conns }]
@@ -175,6 +180,11 @@ export const useGameStore = create((set, get) => ({
   /** Skip tutorial entirely */
   skipTutorial() {
     set({ tutorialStep: null })
+  },
+
+  /** Toggle between 'adventure' and 'architect' modes */
+  setMode(mode) {
+    set({ mode })
   },
 
   // ── Actions ─────────────────────────────────────────────────────────────────

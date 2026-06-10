@@ -214,6 +214,29 @@ const S = {
     color: '#2a3a28',
     textTransform: 'uppercase',
   },
+  modeRow: {
+    display: 'flex', gap: '8px', marginBottom: '4px',
+  },
+  modeBtn: {
+    flex: 1, padding: '8px 0',
+    background: 'transparent',
+    border: '1px solid rgba(60,80,50,0.4)',
+    borderRadius: '3px',
+    color: '#3a5030',
+    fontFamily: "'Cinzel', serif",
+    fontSize: '11px', letterSpacing: '0.1em',
+    cursor: 'pointer', transition: 'all 0.15s',
+  },
+  modeBtnActive: {
+    background: 'rgba(40,70,30,0.4)',
+    borderColor: 'rgba(96,160,64,0.6)',
+    color: '#90c070',
+  },
+  modeDesc: {
+    fontSize: '10px', color: '#3a5030', letterSpacing: '0.15em',
+    margin: '0 0 16px', textAlign: 'center',
+    fontFamily: 'sans-serif',
+  },
   hasSave: {
     fontSize: '10px',
     color: '#4a6a40',
@@ -336,6 +359,8 @@ export default function TitleScreen() {
   const rafRef     = useRef(null)
   const startGame  = useGameStore(s => s.startGame)
   const continueGame = useGameStore(s => s.continueGame)
+  const mode       = useGameStore(s => s.mode)
+  const setMode    = useGameStore(s => s.setMode)
   const [showHowTo, setShowHowTo]   = useState(false)
   const [hasSave, setHasSave]       = useState(false)
 
@@ -377,6 +402,23 @@ export default function TitleScreen() {
         <h1 style={S.title}>CloudRealm</h1>
         <p style={S.subtitle}>AWS Architecture · Strategy · Education</p>
         <div style={S.divider} />
+
+        {/* Mode toggle */}
+        <div style={S.modeRow}>
+          <button
+            style={{ ...S.modeBtn, ...(mode === 'adventure' ? S.modeBtnActive : {}) }}
+            onClick={() => setMode('adventure')}
+          >⚔ Adventure</button>
+          <button
+            style={{ ...S.modeBtn, ...(mode === 'architect' ? S.modeBtnActive : {}) }}
+            onClick={() => setMode('architect')}
+          >📐 Architect</button>
+        </div>
+        <p style={S.modeDesc}>
+          {mode === 'adventure'
+            ? 'Fantasy theme · Narrative missions'
+            : 'AWS names · SAA-C03 exam prep'}
+        </p>
 
         <div style={S.menuGroup}>
           <button

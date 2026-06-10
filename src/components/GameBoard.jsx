@@ -1,10 +1,11 @@
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { useGameStore }        from '../store/gameStore.js'
 import { SERVICES, COLS, ROWS, HEX_R, TERRAIN } from '../game/constants.js'
 import { hexCenter, pixelToHex, getNeighbors, drawHexPath, canPlaceHere } from '../game/hexGrid.js'
 import { drawSprite } from '../game/sprites.js'
 import { startAmbient, stopAmbient, playHover } from '../game/audio.js'
 import { buildInitialWaveState, simulationTick, computeWaveResult } from '../game/simulation.js'
+import ServiceInfoOverlay from './ServiceInfoOverlay.jsx'
 
 /**
  * GameBoard — the canvas component.
@@ -74,6 +75,13 @@ export default function GameBoard() {
   const lastTickTimeRef  = useRef(null)   // previous RAF `now` value for delta
   const activationsRef   = useRef([])     // { pos, startTime } rings animation
   const lastDispatchRef  = useRef(0)      // throttle store dispatch (performance.now)
+  const lastPlacedRef    = useRef(null)   // { row, col } — most recent placement (for Z-undo)
+
+  // ── Click-to-learn overlay state (local — doesn't need to reach other components)
+  const [infoTile, setInfoTile] = useState(null) // { row, col, serviceId } | null
+
+  // ── Store subscriptions for keyboard shortcuts (need live values) ────────────
+  const selectService  = useGameStore(s => s.selectService)
 
   // ── Toast (simple in-canvas notification, no DOM element needed) ─────────────
   const toastRef = useRef({ msg: '', until: 0 })
@@ -544,7 +552,7 @@ export default function GameBoard() {
   const handleMouseUp = useCallback(() => { dragRef.current = null }, [])
   const handleMouseLeave = useCallback(() => { hoverRef.current = null }, [])
 
-  // ── Click — place service ─────────────────────────────────────────────────────
+  // ── Click — place service OR open info overlay ───────────────────────────────
   const handleClick = useCallback((e) => {
     if (dragRef.current) return   // was a pan gesture, not a click
     const canvas = canvasRef.current
@@ -554,8 +562,21 @@ export default function GameBoard() {
     const { wx, wy } = canvasToWorld(cx, cy)
     const { row, col } = pixelToHex(wx, wy)
 
-    const result = placeService(row, col)
-    if (result) showToast(result.message, !result.ok)
+    if (selectedRef.current) {
+      // Placement mode: try to place the selected service
+      const result = placeService(row, col)
+      if (result) {
+        if (result.ok) lastPlacedRef.current = { row, col }
+        showToast(result.message, !result.ok)
+      }
+      return
+    }
+
+    // Info mode: if tile has a placed service during build phase, show overlay
+    const cell = gridRef.current[row]?.[col]
+    if (cell?.service && phaseRef.current === 'build') {
+      setInfoTile({ row, col, serviceId: cell.service })
+    }
   }, [canvasToWorld, placeService])
 
   // ── Right-click — remove service ──────────────────────────────────────────────
@@ -572,24 +593,95 @@ export default function GameBoard() {
     if (result) showToast(result.message, !result.ok)
   }, [canvasToWorld, removeService])
 
-  // ── Escape to cancel selection ────────────────────────────────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────────
+  // Keys: 1–9 select services, Escape cancel/close, Z undo, +/- zoom,
+  //       Arrow keys pan, Space re-centre.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') clearSelection() }
+    const PAN_STEP = 40
+
+    function onKey(e) {
+      // Don't intercept when user is typing in a form element
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+
+      const key = e.key
+
+      // Escape — cancel placement OR close info overlay
+      if (key === 'Escape') {
+        clearSelection()
+        setInfoTile(null)
+        return
+      }
+
+      // 1–9 — select service by palette index
+      if (key >= '1' && key <= '9') {
+        const idx  = parseInt(key, 10) - 1
+        const svcs = SERVICES.filter(s => s.zone !== 'any' || true) // all services
+        if (svcs[idx]) selectService(svcs[idx].id)
+        return
+      }
+
+      // Z — undo last placement
+      if ((key === 'z' || key === 'Z') && !e.metaKey && !e.ctrlKey) {
+        if (lastPlacedRef.current) {
+          const { row, col } = lastPlacedRef.current
+          const result = removeService(row, col)
+          if (result) showToast(result.message, !result.ok)
+          lastPlacedRef.current = null
+        }
+        return
+      }
+
+      // +/= — zoom in;  - — zoom out
+      if (key === '+' || key === '=') {
+        e.preventDefault()
+        setCamera({ zoom: Math.min(3.5, cameraRef.current.zoom + 0.15) })
+        return
+      }
+      if (key === '-' || key === '_') {
+        e.preventDefault()
+        setCamera({ zoom: Math.max(0.4, cameraRef.current.zoom - 0.15) })
+        return
+      }
+
+      // Arrow keys — pan
+      if (key === 'ArrowLeft')  { e.preventDefault(); setCamera({ panX: cameraRef.current.panX + PAN_STEP }); return }
+      if (key === 'ArrowRight') { e.preventDefault(); setCamera({ panX: cameraRef.current.panX - PAN_STEP }); return }
+      if (key === 'ArrowUp')    { e.preventDefault(); setCamera({ panY: cameraRef.current.panY + PAN_STEP }); return }
+      if (key === 'ArrowDown')  { e.preventDefault(); setCamera({ panY: cameraRef.current.panY - PAN_STEP }); return }
+
+      // Space — centre the map
+      if (key === ' ') {
+        e.preventDefault()
+        setCamera({ panX: 40, panY: 20, zoom: 1.0 })
+      }
+    }
+
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [clearSelection])
+  }, [clearSelection, selectService, removeService, setCamera])
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'block', width: '100%', height: '100%', cursor: selectedServiceId ? 'crosshair' : 'default' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+      />
+      {infoTile && (
+        <ServiceInfoOverlay
+          serviceId={infoTile.serviceId}
+          row={infoTile.row}
+          col={infoTile.col}
+          placed={placed}
+          onClose={() => setInfoTile(null)}
+        />
+      )}
+    </div>
   )
 }
 

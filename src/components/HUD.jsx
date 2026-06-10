@@ -12,6 +12,8 @@ export default function HUD() {
   const waveTimer         = useGameStore(s => s.waveTimer)
   const waveStats         = useGameStore(s => s.waveStats)
   const startWave         = useGameStore(s => s.startWave)
+  const mode              = useGameStore(s => s.mode)
+  const setMode           = useGameStore(s => s.setMode)
   const currentMission    = MISSIONS[activeMission]
 
   // Total hourly gold burn rate from all placed services
@@ -82,7 +84,16 @@ export default function HUD() {
         </div>
       )}
 
-      <div style={S.hint}>scroll to zoom · alt+drag to pan</div>
+      <div style={S.hint}>scroll to zoom · alt+drag to pan · click tile to learn</div>
+
+      {/* Mode toggle badge */}
+      <button
+        style={{ ...S.modeTag, color: mode === 'architect' ? '#8090e0' : '#70a060' }}
+        onClick={() => setMode(mode === 'adventure' ? 'architect' : 'adventure')}
+        title={mode === 'adventure' ? 'Switch to Architect Mode (SAA-C03 prep)' : 'Switch to Adventure Mode'}
+      >
+        {mode === 'adventure' ? '⚔ Adventure' : '📐 Architect'}
+      </button>
 
       <button
         style={{ ...S.muteBtn, ...(muted ? S.muteBtnMuted : {}) }}
@@ -168,6 +179,14 @@ const S = {
   waveStatOk:    { color: '#60e090', fontFamily: 'Cinzel, serif', fontSize: 12 },
   waveStatFail:  { color: '#e06060', fontFamily: 'Cinzel, serif', fontSize: 12 },
   waveStatThreat:{ color: '#e08060', fontFamily: 'Cinzel, serif', fontSize: 12 },
+  modeTag: {
+    background: 'var(--bg3)', border: '1px solid var(--border)',
+    borderRadius: 12, padding: '3px 10px',
+    fontSize: 10, cursor: 'pointer', letterSpacing: '0.1em',
+    fontFamily: "'Cinzel', serif",
+    transition: 'color 0.2s, border-color 0.2s',
+    flexShrink: 0,
+  },
   muteBtn: {
     background: 'var(--bg3)', border: '1px solid var(--border)',
     borderRadius: 8, padding: '5px 10px',

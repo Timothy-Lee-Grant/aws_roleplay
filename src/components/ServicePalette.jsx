@@ -17,16 +17,22 @@ export default function ServicePalette() {
   const placed            = useGameStore(s => s.placed)
   const selectService     = useGameStore(s => s.selectService)
   const clearSelection    = useGameStore(s => s.clearSelection)
+  const mode              = useGameStore(s => s.mode)
+  const isArchitect       = mode === 'architect'
 
   const selectedSvc = SERVICES.find(s => s.id === selectedServiceId)
 
   return (
     <div style={S.panel}>
-      <div style={S.header}>⚔ Service Roster</div>
+      <div style={S.header}>
+        {isArchitect ? '📐 AWS Services' : '⚔ Service Roster'}
+      </div>
 
       {selectedSvc && (
         <div style={S.hint}>
-          <span style={{ flex: 1 }}>{selectedSvc.icon} Placing: {selectedSvc.fantasy}</span>
+          <span style={{ flex: 1 }}>
+            {selectedSvc.icon} Placing: {isArchitect ? selectedSvc.aws : selectedSvc.fantasy}
+          </span>
           <button style={S.cancel} onClick={clearSelection}>✕</button>
         </div>
       )}
@@ -56,8 +62,17 @@ export default function ServicePalette() {
               <div style={S.top}>
                 <span style={S.icon}>{svc.icon}</span>
                 <div style={S.names}>
-                  <div style={S.fantasy}>{svc.fantasy}</div>
-                  <div style={S.aws}>{svc.aws}</div>
+                  {isArchitect ? (
+                    <>
+                      <div style={{ ...S.fantasy, fontSize: '11px' }}>{svc.aws}</div>
+                      <div style={{ ...S.aws, fontSize: '10px', color: '#3a5030' }}>{svc.fantasy}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={S.fantasy}>{svc.fantasy}</div>
+                      <div style={S.aws}>{svc.aws}</div>
+                    </>
+                  )}
                 </div>
               </div>
 
