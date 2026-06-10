@@ -8,6 +8,9 @@ export default function HUD() {
   const placed            = useGameStore(s => s.placed)
   const completedMissions = useGameStore(s => s.completedMissions)
   const activeMission     = useGameStore(s => s.activeMission)
+  const phase             = useGameStore(s => s.phase)
+  const startWave         = useGameStore(s => s.startWave)
+  const endWave           = useGameStore(s => s.endWave)
   const currentMission    = MISSIONS[activeMission]
 
   // Local state tracks mute icon — mirrors the audio module's mute flag
@@ -17,6 +20,29 @@ export default function HUD() {
     const nowMuted = toggleMute()
     setMuted(nowMuted)
   }, [])
+
+  // "Unleash the Traffic" — triggers wave phase.
+  // Until the real simulation engine (Phase 2) is built, we run a stub:
+  // wait 3 seconds, then auto-resolve with a placeholder result.
+  const handleUnleash = useCallback(() => {
+    startWave()
+    setTimeout(() => {
+      endWave({
+        packetsOk:      Math.max(0, placed.length * 3 - 4),
+        packetsFailed:  4,
+        threats:        placed.length >= 3 ? 1 : 3,
+        score:          Math.min(100, placed.length * 12),
+        wellArchitected: {
+          security:             Math.min(40, placed.length * 5),
+          reliability:          Math.min(20, placed.length * 3),
+          performance:          Math.min(20, placed.length * 3),
+          costOptimization:     Math.min(10, placed.length * 2),
+          operationalExcellence: Math.min(10, placed.length * 1),
+        },
+        note: 'Simulation engine coming in Phase 2 — this is a placeholder result.',
+      })
+    }, 3000)
+  }, [startWave, endWave, placed.length])
 
   return (
     <div style={S.bar}>
@@ -29,9 +55,22 @@ export default function HUD() {
 
       <div style={S.pills}>
         <Pill icon="⚔️" label="Deployed" value={placed.length} />
-        <Pill icon="✅" label="Complete"  value={`${completedMissions.size}/3`} />
+        <Pill icon="✅" label="Complete"  value={`${completedMissions.length}/${MISSIONS.length}`} />
         <Pill icon="🪙" label="Gold"      value={gold} />
       </div>
+
+      {/* Wave trigger — only shown during build phase */}
+      {phase === 'build' && placed.length >= 2 && (
+        <button
+          style={S.unleashBtn}
+          onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg, #5a1a10 0%, #3a0e08 100%)'; e.currentTarget.style.borderColor = 'rgba(200,80,60,0.8)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(180deg, #3a1010 0%, #280a08 100%)'; e.currentTarget.style.borderColor = 'rgba(160,60,40,0.5)' }}
+          onClick={handleUnleash}
+          title="Send a wave of traffic through your architecture"
+        >
+          ⚡ Unleash the Traffic
+        </button>
+      )}
 
       <div style={S.hint}>scroll to zoom · alt+drag to pan</div>
 
@@ -56,6 +95,20 @@ function Pill({ icon, label, value }) {
 }
 
 const S = {
+  unleashBtn: {
+    background: 'linear-gradient(180deg, #3a1010 0%, #280a08 100%)',
+    border: '1px solid rgba(160,60,40,0.5)',
+    borderRadius: '3px',
+    color: '#e08060',
+    fontFamily: "'Cinzel', serif",
+    fontSize: '12px',
+    letterSpacing: '0.1em',
+    padding: '6px 14px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
   bar: {
     background: 'var(--bg2)',
     borderBottom: '1px solid var(--border2)',

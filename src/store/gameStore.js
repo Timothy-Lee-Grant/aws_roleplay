@@ -21,6 +21,13 @@ import {
  */
 export const useGameStore = create((set, get) => ({
 
+  // ── Phase state machine ─────────────────────────────────────────────────────
+  // 'title'  → splash screen, no game state active
+  // 'build'  → player places services on the board
+  // 'wave'   → traffic simulation running (no placements)
+  // 'debrief'→ wave complete, score shown, player can advance to next mission
+  phase: 'title',
+
   // ── Game state ──────────────────────────────────────────────────────────────
   grid:              buildGrid(),   // 2D array of { terrain, service }
   placed:            [],            // [{ id, row, col, zone, conns }]
@@ -32,6 +39,11 @@ export const useGameStore = create((set, get) => ({
   completedMissions: [],
   activeMission:     0,
 
+  // ── Wave / debrief data ──────────────────────────────────────────────────────
+  // Populated by endWave(); read by DebriefScreen.
+  waveResult: null, // { packetsOk, packetsFailed, threats, score, wellArchitected }
+
+
   // ── Camera (pan + zoom for the canvas) ─────────────────────────────────────
   panX:   40,
   panY:   20,
@@ -39,6 +51,64 @@ export const useGameStore = create((set, get) => ({
 
   // ── Derived: expose getNeighbors so mission checks can use it ───────────────
   getNeighbors,
+
+  // ── Phase transitions ────────────────────────────────────────────────────────
+
+  /** title → build  (new game) */
+  startGame() {
+    set({
+      phase:             'build',
+      grid:              buildGrid(),
+      placed:            [],
+      selectedServiceId: null,
+      gold:              100,
+      completedMissions: [],
+      activeMission:     0,
+      waveResult:        null,
+      panX: 40, panY: 20, zoom: 1.0,
+    })
+  },
+
+  /** title → build  (continue — restore saved state if present) */
+  continueGame() {
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem('cloudRealm_save')) } catch { return null }
+    })()
+    if (!saved) {
+      get().startGame()
+      return
+    }
+    set({
+      phase:             'build',
+      grid:              saved.grid   ?? buildGrid(),
+      placed:            saved.placed ?? [],
+      gold:              saved.gold   ?? 100,
+      completedMissions: saved.completedMissions ?? [],
+      activeMission:     saved.activeMission     ?? 0,
+      selectedServiceId: null,
+      waveResult:        null,
+      panX: 40, panY: 20, zoom: 1.0,
+    })
+  },
+
+  /** build → wave */
+  startWave() {
+    set({ phase: 'wave', selectedServiceId: null })
+  },
+
+  /**
+   * wave → debrief
+   * result: { packetsOk, packetsFailed, threats, score, wellArchitected }
+   * Pass a stub result for now; the real simulation engine fills this in Phase 2.
+   */
+  endWave(result) {
+    set({ phase: 'debrief', waveResult: result })
+  },
+
+  /** debrief → build  (next mission — keep board state so player can improve) */
+  continueFromDebrief() {
+    set({ phase: 'build', waveResult: null })
+  },
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -178,6 +248,22 @@ export const useGameStore = create((set, get) => ({
     }))
   },
 }))
+
+// ─── Persistence ─────────────────────────────────────────────────────────────
+// Save relevant slice to localStorage whenever it changes.
+// Restore happens in continueGame() above.
+useGameStore.subscribe(
+  state => ({
+    grid:              state.grid,
+    placed:            state.placed,
+    gold:              state.gold,
+    completedMissions: state.completedMissions,
+    activeMission:     state.activeMission,
+  }),
+  snapshot => {
+    try { localStorage.setItem('cloudRealm_save', JSON.stringify(snapshot)) } catch { /* quota */ }
+  },
+)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
